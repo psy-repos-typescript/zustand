@@ -1,6 +1,6 @@
 ---
 title: Slices Pattern
-nav: 15
+nav: 14
 ---
 
 ## Slicing the store into smaller stores
@@ -67,13 +67,10 @@ export default App
 You can update multiple stores, at the same time, in a single function.
 
 ```js
-import { createBearSlice } from './bearSlice'
-import { createFishSlice } from './fishSlice'
-
-export const createBearFishSlice = (set) => ({
+export const createBearFishSlice = (set, get) => ({
   addBearAndFish: () => {
-    createBearSlice(set).addBear()
-    createFishSlice(set).addFish()
+    get().addBear()
+    get().addFish()
   },
 })
 ```
@@ -111,10 +108,12 @@ export const useBoundStore = create(
       ...createBearSlice(...a),
       ...createFishSlice(...a),
     }),
-    { name: 'bound-store' }
-  )
+    { name: 'bound-store' },
+  ),
 )
 ```
+
+Please keep in mind you should only apply middlewares in the combined store. Applying them inside individual slices can lead to unexpected issues.
 
 ## Usage with TypeScript
 

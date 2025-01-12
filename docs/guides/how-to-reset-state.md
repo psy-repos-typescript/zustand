@@ -1,6 +1,6 @@
 ---
 title: How to reset state
-nav: 13
+nav: 12
 ---
 
 The following pattern can be used to reset the state to its initial value.
@@ -29,15 +29,12 @@ const initialState: State = {
 // create store
 const useSlice = create<State & Actions>()((set, get) => ({
   ...initialState,
-
   addSalmon: (qty: number) => {
     set({ salmon: get().salmon + qty })
   },
-
   addTuna: (qty: number) => {
     set({ tuna: get().tuna + qty })
   },
-
   reset: () => {
     set(initialState)
   },
@@ -47,25 +44,27 @@ const useSlice = create<State & Actions>()((set, get) => ({
 Resetting multiple stores at once
 
 ```ts
-import { create: _create, StateCreator } from 'zustand'
+import type { StateCreator } from 'zustand'
+import { create: actualCreate } from 'zustand'
 
-const resetters: (() => void)[] = []
+const storeResetFns = new Set<() => void>()
 
-export const create = (<T extends unknown>(f: StateCreator<T> | undefined) => {
-  if (f === undefined) return create
-  const store = _create(f)
-  const initialState = store.getState()
-  resetters.push(() => {
-    store.setState(initialState, true)
+const resetAllStores = () => {
+  storeResetFns.forEach((resetFn) => {
+    resetFn()
   })
-  return store
-}) as typeof _create
-
-export const resetAllStores = () => {
-  for (const resetter of resetters) {
-    resetter()
-  }
 }
+
+export const create = (<T>() => {
+  return (stateCreator: StateCreator<T>) => {
+    const store = actualCreate(stateCreator)
+    const initialState = store.getInitialState()
+    storeResetFns.add(() => {
+      store.setState(initialState, true)
+    })
+    return store
+  }
+}) as typeof actualCreate
 ```
 
 ## CodeSandbox Demo

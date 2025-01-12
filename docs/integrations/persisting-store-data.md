@@ -1,6 +1,6 @@
 ---
 title: Persisting store data
-nav: 17
+nav: 20
 ---
 
 The Persist middleware enables you to store
@@ -30,8 +30,8 @@ export const useBearStore = create(
     {
       name: 'food-storage', // name of the item in the storage (must be unique)
       storage: createJSONStorage(() => sessionStorage), // (optional) by default, 'localStorage' is used
-    }
-  )
+    },
+  ),
 )
 ```
 
@@ -56,8 +56,7 @@ import { StateStorage } from 'zustand/middleware'
 
 > Default: `createJSONStorage(() => localStorage)`
 
-Enables you to use your own storage.
-Simply pass a function that returns the storage you want to use.
+Enables you to use your own storage. Simply pass a function that returns the storage you want to use. It's recommended to use the [`createJSONStorage`](#createjsonstorage) helper function to create a `storage` object that is compliant with the `StateStorage` interface.
 
 Example:
 
@@ -72,8 +71,8 @@ export const useBoundStore = create(
     {
       // ...
       storage: createJSONStorage(() => AsyncStorage),
-    }
-  )
+    },
+  ),
 )
 ```
 
@@ -98,10 +97,10 @@ export const useBoundStore = create(
       // ...
       partialize: (state) =>
         Object.fromEntries(
-          Object.entries(state).filter(([key]) => !['foo'].includes(key))
+          Object.entries(state).filter(([key]) => !['foo'].includes(key)),
         ),
-    }
-  )
+    },
+  ),
 )
 ```
 
@@ -117,8 +116,8 @@ export const useBoundStore = create(
     {
       // ...
       partialize: (state) => ({ foo: state.foo }),
-    }
-  )
+    },
+  ),
 )
 ```
 
@@ -151,8 +150,8 @@ export const useBoundStore = create(
           }
         }
       },
-    }
-  )
+    },
+  ),
 )
 ```
 
@@ -202,8 +201,8 @@ export const useBoundStore = create(
 
         return persistedState
       },
-    }
-  )
+    },
+  ),
 )
 ```
 
@@ -256,9 +255,53 @@ export const useBoundStore = create(
       // ...
       merge: (persistedState, currentState) =>
         deepMerge(currentState, persistedState),
-    }
-  )
+    },
+  ),
 )
+```
+
+### `skipHydration`
+
+> Type: `boolean | undefined`
+
+> Default: `undefined`
+
+By default the store will be hydrated on initialization.
+
+In some applications you may need to control when the first hydration occurs.
+For example, in server-rendered apps.
+
+If you set `skipHydration`, the initial call for hydration isn't called,
+and it is left up to you to manually call `rehydrate()`.
+
+```ts
+export const useBoundStore = create(
+  persist(
+    () => ({
+      count: 0,
+      // ...
+    }),
+    {
+      // ...
+      skipHydration: true,
+    },
+  ),
+)
+```
+
+```tsx
+import { useBoundStore } from './path-to-store';
+
+export function StoreConsumer() {
+  // hydrate persisted store after on mount
+  useEffect(() => {
+    useBoundStore.persist.rehydrate();
+  }, [])
+
+  return (
+    //...
+  )
+}
 ```
 
 ## API
@@ -371,6 +414,37 @@ const unsub = useBoundStore.persist.onFinishHydration((state) => {
 unsub()
 ```
 
+### `createJSONStorage`
+
+> Type: `(getStorage: () => StateStorage, options?: JsonStorageOptions) => StateStorage`
+
+> Returns: `PersistStorage`
+
+This helper function enables you to create a [`storage`](#storage) object which is useful when you want to use a custom storage engine.
+
+`getStorage` is a function that returns the storage engine with the properties `getItem`, `setItem`, and `removeItem`.
+
+`options` is an optional object that can be used to customize the serialization and deserialization of the data. `options.reviver` is a function that is passed to `JSON.parse` to deserialize the data. `options.replacer` is a function that is passed to `JSON.stringify` to serialize the data.
+
+```ts
+import { createJSONStorage } from 'zustand/middleware'
+
+const storage = createJSONStorage(() => sessionStorage, {
+  reviver: (key, value) => {
+    if (value && value.type === 'date') {
+      return new Date(value)
+    }
+    return value
+  },
+  replacer: (key, value) => {
+    if (value instanceof Date) {
+      return { type: 'date', value: value.toISOString() }
+    }
+    return value
+  },
+})
+```
+
 ## Hydration and asynchronous storages
 
 To explain what is the "cost" of asynchronous storages,
@@ -408,6 +482,75 @@ If your app does depends on the persisted state at page load,
 see [_How can I check if my store has been hydrated_](#how-can-i-check-if-my-store-has-been-hydrated)
 in the [FAQ](#faq) section below.
 
+### Usage in Next.js
+
+NextJS uses Server Side Rendering, and it will compare the rendered component on the server with the one rendered on client.
+But since you are using data from browser to change your component, the two renders will differ and Next will throw a warning at you.
+
+The errors usually are:
+
+- Text content does not match server-rendered HTML
+- Hydration failed because the initial UI does not match what was rendered on the server
+- There was an error while hydrating. Because the error happened outside of a Suspense boundary, the entire root will switch to client rendering
+
+To solve these errors, create a custom hook so that Zustand waits a little before changing your components.
+
+Create a file with the following:
+
+```ts
+// useStore.ts
+import { useState, useEffect } from 'react'
+
+const useStore = <T, F>(
+  store: (callback: (state: T) => unknown) => unknown,
+  callback: (state: T) => F,
+) => {
+  const result = store(callback) as F
+  const [data, setData] = useState<F>()
+
+  useEffect(() => {
+    setData(result)
+  }, [result])
+
+  return data
+}
+
+export default useStore
+```
+
+Now in your pages, you will use the hook a little bit differently:
+
+```ts
+// useBearStore.ts
+
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+
+// the store itself does not need any change
+export const useBearStore = create(
+  persist(
+    (set, get) => ({
+      bears: 0,
+      addABear: () => set({ bears: get().bears + 1 }),
+    }),
+    {
+      name: 'food-storage',
+    },
+  ),
+)
+```
+
+```ts
+// yourComponent.tsx
+
+import useStore from './useStore'
+import { useBearStore } from './stores/useBearStore'
+
+const bears = useStore(useBearStore, (state) => state.bears)
+```
+
+Credits: [This reply to an issue](https://github.com/pmndrs/zustand/issues/938#issuecomment-1481801942), which points to [this blog post](https://dev.to/abdulsamad/how-to-use-zustands-persist-middleware-in-nextjs-4lb5).
+
 ## FAQ
 
 ### How can I check if my store has been hydrated
@@ -431,8 +574,8 @@ const useBoundStore = create(
     }),
     {
       // ...
-      onRehydrateStorage: () => (state) => {
-        state.setHasHydrated(true)
+      onRehydrateStorage: (state) => {
+        return () => state.setHasHydrated(true)
       }
     }
   )
@@ -457,7 +600,7 @@ You can also create a custom `useHydration` hook:
 const useBoundStore = create(persist(...))
 
 const useHydration = () => {
-  const [hydrated, setHydrated] = useState(useBoundStore.persist.hasHydrated)
+  const [hydrated, setHydrated] = useState(false)
 
   useEffect(() => {
     // Note: This is just in case you want to take into account manual rehydration.
@@ -484,7 +627,7 @@ If the storage you want to use does not match the expected API, you can create y
 
 ```ts
 import { create } from 'zustand'
-import { persist, StateStorage } from 'zustand/middleware'
+import { persist, createJSONStorage, StateStorage } from 'zustand/middleware'
 import { get, set, del } from 'idb-keyval' // can use anything: IndexedDB, Ionic Storage, etc.
 
 // Custom storage object
@@ -512,8 +655,56 @@ export const useBoundStore = create(
     {
       name: 'food-storage', // unique name
       storage: createJSONStorage(() => storage),
-    }
-  )
+    },
+  ),
+)
+```
+
+If you're using a type that `JSON.stringify()` doesn't support, you'll need to write your own serialization/deserialization code. However, if this is tedious, you can use third-party libraries to serialize and deserialize different types of data.
+
+For example, [Superjson](https://github.com/blitz-js/superjson) can serialize data along with its type, allowing the data to be parsed back to its original type upon deserialization
+
+```ts
+import superjson from 'superjson' //  can use anything: serialize-javascript, devalue, etc.
+import { PersistStorage } from 'zustand/middleware'
+
+interface BearState {
+  bear: Map<string, string>
+  fish: Set<string>
+  time: Date
+  query: RegExp
+}
+
+const storage: PersistStorage<BearState> = {
+  getItem: (name) => {
+    const str = localStorage.getItem(name)
+    if (!str) return null
+    return superjson.parse(str)
+  },
+  setItem: (name, value) => {
+    localStorage.setItem(name, superjson.stringify(value))
+  },
+  removeItem: (name) => localStorage.removeItem(name),
+}
+
+const initialState: BearState = {
+  bear: new Map(),
+  fish: new Set(),
+  time: new Date(),
+  query: new RegExp(''),
+}
+
+export const useBearStore = create<BearState>()(
+  persist(
+    (set) => ({
+      ...initialState,
+      // ...
+    }),
+    {
+      name: 'food-storage',
+      storage,
+    },
+  ),
 )
 ```
 
@@ -550,7 +741,7 @@ except for writing `create<State>()(...)` instead of `create(...)`.
 
 ```tsx
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage } from 'zustand/middleware'
 
 interface MyState {
   bears: number
@@ -567,36 +758,44 @@ export const useBearStore = create<MyState>()(
       name: 'food-storage', // name of item in the storage (must be unique)
       storage: createJSONStorage(() => sessionStorage), // (optional) by default the 'localStorage' is used
       partialize: (state) => ({ bears: state.bears }),
-    }
-  )
+    },
+  ),
 )
 ```
 
 ### How do I use it with Map and Set
 
-With the previous persist API, you would use `serialize`/`deserialize`
-to deal with `Map` and `Set` and convert them into
-an Array so they could be parsed into proper JSON.
+In order to persist object types such as `Map` and `Set`, they will need to be converted to JSON-serializable types such as an `Array` which can be done by defining a custom `storage` engine.
 
-The new persist API has deprecated `serialize`/`deserialize`.
-
-Now, you will need to use the `storage` prop.
 Let's say your state uses `Map` to handle a list of `transactions`,
-then you can convert the Map into an Array in the storage prop:
+then you can convert the `Map` into an `Array` in the `storage` prop which is shown below:
 
 ```ts
+
+interface BearState {
+  .
+  .
+  .
+  transactions: Map<any>
+}
+
   storage: {
     getItem: (name) => {
-      const str = localStorage.getItem(name)
+      const str = localStorage.getItem(name);
+      if (!str) return null;
+      const existingValue = JSON.parse(str);
       return {
+        ...existingValue,
         state: {
-          ...JSON.parse(str).state,
-          transactions: new Map(JSON.parse(str).state.transactions),
-        },
+          ...existingValue.state,
+          transactions: new Map(existingValue.state.transactions),
+        }
       }
     },
-    setItem: (name, newValue) => {
+    setItem: (name, newValue: StorageValue<BearState>) => {
+      // functions cannot be JSON encoded
       const str = JSON.stringify({
+        ...newValue,
         state: {
           ...newValue.state,
           transactions: Array.from(newValue.state.transactions.entries()),

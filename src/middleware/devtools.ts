@@ -1,75 +1,15 @@
 import type {} from '@redux-devtools/extension'
-import type { StateCreator, StoreApi, StoreMutatorIdentifier } from '../vanilla'
+import type {
+  StateCreator,
+  StoreApi,
+  StoreMutatorIdentifier,
+} from '../vanilla.ts'
 
-// Copy types to avoid import type { Config } from '@redux-devtools/extension'
-// https://github.com/pmndrs/zustand/issues/1205
-type Action<T = any> = {
-  type: T
-}
-type ActionCreator<A, P extends any[] = any[]> = {
-  (...args: P): A
-}
-type EnhancerOptions = {
-  name?: string
-  actionCreators?:
-    | ActionCreator<any>[]
-    | {
-        [key: string]: ActionCreator<any>
-      }
-  latency?: number
-  maxAge?: number
-  serialize?:
-    | boolean
-    | {
-        options?:
-          | undefined
-          | boolean
-          | {
-              date?: true
-              regex?: true
-              undefined?: true
-              error?: true
-              symbol?: true
-              map?: true
-              set?: true
-              function?: true | ((fn: (...args: any[]) => any) => string)
-            }
-        replacer?: (key: string, value: unknown) => any
-        reviver?: (key: string, value: unknown) => any
-        immutable?: any
-        refs?: any
-      }
-  actionSanitizer?: <A extends Action>(action: A, id: number) => A
-  stateSanitizer?: <S>(state: S, index: number) => S
-  actionsBlacklist?: string | string[]
-  actionsWhitelist?: string | string[]
-  actionsDenylist?: string | string[]
-  actionsAllowlist?: string | string[]
-  predicate?: <S, A extends Action>(state: S, action: A) => boolean
-  shouldRecordChanges?: boolean
-  pauseActionType?: string
-  autoPause?: boolean
-  shouldStartLocked?: boolean
-  shouldHotReload?: boolean
-  shouldCatchErrors?: boolean
-  features?: {
-    pause?: boolean
-    lock?: boolean
-    persist?: boolean
-    export?: boolean | 'custom'
-    import?: boolean | 'custom'
-    jump?: boolean
-    skip?: boolean
-    reorder?: boolean
-    dispatch?: boolean
-    test?: boolean
-  }
-  trace?: boolean | (<A extends Action>(action: A) => string)
-  traceLimit?: number
-}
-type Config = EnhancerOptions & {
-  type?: string
-}
+type Config = Parameters<
+  (Window extends { __REDUX_DEVTOOLS_EXTENSION__?: infer T }
+    ? T
+    : { connect: (param: any) => any })['connect']
+>[0]
 
 declare module '../vanilla' {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -90,36 +30,46 @@ type Write<T, U> = Omit<T, keyof U> & U
 type TakeTwo<T> = T extends { length: 0 }
   ? [undefined, undefined]
   : T extends { length: 1 }
-  ? [...a0: Cast<T, unknown[]>, a1: undefined]
-  : T extends { length: 0 | 1 }
-  ? [...a0: Cast<T, unknown[]>, a1: undefined]
-  : T extends { length: 2 }
-  ? T
-  : T extends { length: 1 | 2 }
-  ? T
-  : T extends { length: 0 | 1 | 2 }
-  ? T
-  : T extends [infer A0, infer A1, ...unknown[]]
-  ? [A0, A1]
-  : T extends [infer A0, (infer A1)?, ...unknown[]]
-  ? [A0, A1?]
-  : T extends [(infer A0)?, (infer A1)?, ...unknown[]]
-  ? [A0?, A1?]
-  : never
+    ? [...a0: Cast<T, unknown[]>, a1: undefined]
+    : T extends { length: 0 | 1 }
+      ? [...a0: Cast<T, unknown[]>, a1: undefined]
+      : T extends { length: 2 }
+        ? T
+        : T extends { length: 1 | 2 }
+          ? T
+          : T extends { length: 0 | 1 | 2 }
+            ? T
+            : T extends [infer A0, infer A1, ...unknown[]]
+              ? [A0, A1]
+              : T extends [infer A0, (infer A1)?, ...unknown[]]
+                ? [A0, A1?]
+                : T extends [(infer A0)?, (infer A1)?, ...unknown[]]
+                  ? [A0?, A1?]
+                  : never
 
 type WithDevtools<S> = Write<S, StoreDevtools<S>>
 
+type Action =
+  | string
+  | {
+      type: string
+      [x: string | number | symbol]: unknown
+    }
 type StoreDevtools<S> = S extends {
-  setState: (...a: infer Sa) => infer Sr
+  setState: {
+    // capture both overloads of setState
+    (...a: infer Sa1): infer Sr1
+    (...a: infer Sa2): infer Sr2
+  }
 }
   ? {
-      setState<A extends string | { type: unknown }>(
-        ...a: [...a: TakeTwo<Sa>, action?: A]
-      ): Sr
+      setState(...a: [...a: TakeTwo<Sa1>, action?: Action]): Sr1
+      setState(...a: [...a: TakeTwo<Sa2>, action?: Action]): Sr2
     }
   : never
 
 export interface DevtoolsOptions extends Config {
+  name?: string
   enabled?: boolean
   anonymousActionType?: string
   store?: string
@@ -128,10 +78,11 @@ export interface DevtoolsOptions extends Config {
 type Devtools = <
   T,
   Mps extends [StoreMutatorIdentifier, unknown][] = [],
-  Mcs extends [StoreMutatorIdentifier, unknown][] = []
+  Mcs extends [StoreMutatorIdentifier, unknown][] = [],
+  U = T,
 >(
-  initializer: StateCreator<T, [...Mps, ['zustand/devtools', never]], Mcs>,
-  devtoolsOptions?: DevtoolsOptions
+  initializer: StateCreator<T, [...Mps, ['zustand/devtools', never]], Mcs, U>,
+  devtoolsOptions?: DevtoolsOptions,
 ) => StateCreator<T, Mps, [['zustand/devtools', never], ...Mcs]>
 
 declare module '../vanilla' {
@@ -143,7 +94,7 @@ declare module '../vanilla' {
 
 type DevtoolsImpl = <T>(
   storeInitializer: StateCreator<T, [], []>,
-  devtoolsOptions?: DevtoolsOptions
+  devtoolsOptions?: DevtoolsOptions,
 ) => StateCreator<T, [], []>
 
 export type NamedSet<T> = WithDevtools<StoreApi<T>>['setState']
@@ -161,12 +112,12 @@ type ConnectionInformation = {
 const trackedConnections: Map<ConnectionName, ConnectionInformation> = new Map()
 
 const getTrackedConnectionState = (
-  name: string | undefined
+  name: string | undefined,
 ): Record<string, any> => {
   const api = trackedConnections.get(name)
   if (!api) return {}
   return Object.fromEntries(
-    Object.entries(api.stores).map(([key, api]) => [key, api.getState()])
+    Object.entries(api.stores).map(([key, api]) => [key, api.getState()]),
   )
 }
 
@@ -175,7 +126,7 @@ const extractConnectionInformation = (
   extensionConnector: NonNullable<
     (typeof window)['__REDUX_DEVTOOLS_EXTENSION__']
   >,
-  options: Omit<DevtoolsOptions, 'enabled' | 'anonymousActionType' | 'store'>
+  options: Omit<DevtoolsOptions, 'enabled' | 'anonymousActionType' | 'store'>,
 ) => {
   if (store === undefined) {
     return {
@@ -212,16 +163,11 @@ const devtoolsImpl: DevtoolsImpl =
       extensionConnector =
         (enabled ?? import.meta.env?.MODE !== 'production') &&
         window.__REDUX_DEVTOOLS_EXTENSION__
-    } catch (e) {
+    } catch {
       // ignored
     }
 
     if (!extensionConnector) {
-      if (import.meta.env?.MODE !== 'production' && enabled) {
-        console.warn(
-          '[zustand devtools middleware] Please install/enable Redux devtools extension'
-        )
-      }
       return fn(set, get, api)
     }
 
@@ -229,15 +175,15 @@ const devtoolsImpl: DevtoolsImpl =
       extractConnectionInformation(store, extensionConnector, options)
 
     let isRecording = true
-    ;(api.setState as NamedSet<S>) = (state, replace, nameOrAction) => {
-      const r = set(state, replace)
+    ;(api.setState as any) = ((state, replace, nameOrAction: Action) => {
+      const r = set(state, replace as any)
       if (!isRecording) return r
-      const action: Action<unknown> =
+      const action: { type: string } =
         nameOrAction === undefined
           ? { type: anonymousActionType || 'anonymous' }
           : typeof nameOrAction === 'string'
-          ? { type: nameOrAction }
-          : nameOrAction
+            ? { type: nameOrAction }
+            : nameOrAction
       if (store === undefined) {
         connection?.send(action, get())
         return r
@@ -250,15 +196,15 @@ const devtoolsImpl: DevtoolsImpl =
         {
           ...getTrackedConnectionState(options.name),
           [store]: api.getState(),
-        }
+        },
       )
       return r
-    }
+    }) as NamedSet<S>
 
     const setStateFromDevtools: StoreApi<S>['setState'] = (...a) => {
       const originalIsRecording = isRecording
       isRecording = false
-      set(...a)
+      set(...(a as Parameters<typeof set>))
       isRecording = originalIsRecording
     }
 
@@ -274,8 +220,8 @@ const devtoolsImpl: DevtoolsImpl =
             key === connectionInformation.store
               ? initialState
               : store.getState(),
-          ])
-        )
+          ]),
+        ),
       )
     }
 
@@ -293,7 +239,7 @@ const devtoolsImpl: DevtoolsImpl =
         ) {
           console.warn(
             '[zustand devtools middleware] "__setState" action type is reserved ' +
-              'to set state from the devtools. Avoid using it.'
+              'to set state from the devtools. Avoid using it.',
           )
           didWarnAboutReservedActionType = true
         }
@@ -305,7 +251,7 @@ const devtoolsImpl: DevtoolsImpl =
       connection as unknown as {
         // FIXME https://github.com/reduxjs/redux-devtools/issues/1097
         subscribe: (
-          listener: (message: Message) => void
+          listener: (message: Message) => void,
         ) => (() => void) | undefined
       }
     ).subscribe((message: any) => {
@@ -313,7 +259,7 @@ const devtoolsImpl: DevtoolsImpl =
         case 'ACTION':
           if (typeof message.payload !== 'string') {
             console.error(
-              '[zustand devtools middleware] Unsupported action format'
+              '[zustand devtools middleware] Unsupported action format',
             )
             return
           }
@@ -328,10 +274,10 @@ const devtoolsImpl: DevtoolsImpl =
                 if (Object.keys(action.state as S).length !== 1) {
                   console.error(
                     `
-                    [zustand devtools middleware] Unsupported __setState action format. 
+                    [zustand devtools middleware] Unsupported __setState action format.
                     When using 'store' option in devtools(), the 'state' should have only one key, which is a value of 'store' that was passed in devtools(),
                     and value of this only key should be a state object. Example: { "type": "__setState", "state": { "abc123Store": { "foo": "bar" } } }
-                    `
+                    `,
                   )
                 }
                 const stateFromDevtools = (action.state as S)[store]
@@ -353,7 +299,7 @@ const devtoolsImpl: DevtoolsImpl =
               if (!(api as any).dispatchFromDevtools) return
               if (typeof (api as any).dispatch !== 'function') return
               ;(api as any).dispatch(action)
-            }
+            },
           )
 
         case 'DISPATCH':
@@ -410,7 +356,7 @@ const devtoolsImpl: DevtoolsImpl =
               }
               connection?.send(
                 null as any, // FIXME no-any
-                nextLiftedState
+                nextLiftedState,
               )
               return
             }
@@ -433,7 +379,7 @@ const parseJsonThen = <T>(stringified: string, f: (parsed: T) => void) => {
   } catch (e) {
     console.error(
       '[zustand devtools middleware] Could not parse the received json',
-      e
+      e,
     )
   }
   if (parsed !== undefined) f(parsed as T)

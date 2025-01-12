@@ -5,7 +5,7 @@ nav: 0
 ---
 
 <div class="flex justify-center mb-4">
-  <img src="https://github.com/pmndrs/zustand/raw/main/bear.jpg" />
+  <img src="../bear.jpg" alt="Logo Zustand" />
 </div>
 
 A small, fast, and scalable bearbones state management solution.
@@ -23,7 +23,7 @@ It may be the one state manager in the React space that gets all of these right.
 You can try a live demo [here](https://codesandbox.io/s/dazzling-moon-itop4).
 
 [zombie child problem]: https://react-redux.js.org/api/hooks#stale-props-and-zombie-children
-[React concurrency]: https://github.com/bvaughn/rfcs/blob/useMutableSource/text/0000-use-mutable-source.md
+[react concurrency]: https://github.com/bvaughn/rfcs/blob/useMutableSource/text/0000-use-mutable-source.md
 [context loss]: https://github.com/facebook/react/issues/13332
 
 ## Installation
@@ -33,9 +33,7 @@ Zustand is available as a package on NPM for use:
 ```bash
 # NPM
 npm install zustand
-
-# Yarn
-yarn add zustand
+# Or, use any package manager of your choice.
 ```
 
 ## First create a store
@@ -51,6 +49,7 @@ const useStore = create((set) => ({
   bears: 0,
   increasePopulation: () => set((state) => ({ bears: state.bears + 1 })),
   removeAllBears: () => set({ bears: 0 }),
+  updateBears: (newBears) => set({ bears: newBears }),
 }))
 ```
 

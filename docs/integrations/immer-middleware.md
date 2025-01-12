@@ -1,6 +1,6 @@
 ---
 title: Immer middleware
-nav: 16
+nav: 18
 ---
 
 The [Immer](https://github.com/immerjs/immer) middleware enables you
@@ -19,6 +19,8 @@ npm install immer
 
 ## Usage
 
+(Notice the extra parentheses after the type parameter as mentioned in the [Typescript Guide](../guides/typescript.md)).
+
 Updating simple states
 
 ```ts
@@ -34,8 +36,8 @@ type Actions = {
   decrement: (qty: number) => void
 }
 
-export const useCountStore = create(
-  immer<State & Actions>((set) => ({
+export const useCountStore = create<State & Actions>()(
+  immer((set) => ({
     count: 0,
     increment: (qty: number) =>
       set((state) => {
@@ -45,7 +47,7 @@ export const useCountStore = create(
       set((state) => {
         state.count -= qty
       }),
-  }))
+  })),
 )
 ```
 
@@ -69,8 +71,8 @@ type Actions = {
   toggleTodo: (todoId: string) => void
 }
 
-export const useTodoStore = create(
-  immer<State & Actions>((set) => ({
+export const useTodoStore = create<State & Actions>()(
+  immer((set) => ({
     todos: {
       '82471c5f-4207-4b1d-abcb-b98547e01a3e': {
         id: '82471c5f-4207-4b1d-abcb-b98547e01a3e',
@@ -97,7 +99,7 @@ export const useTodoStore = create(
       set((state) => {
         state.todos[todoId].done = !state.todos[todoId].done
       }),
-  }))
+  })),
 )
 ```
 
@@ -123,5 +125,5 @@ Zustand will skip calling the subscriptions.
 
 ## CodeSandbox Demo
 
-- [Basic](https://codesandbox.io/s/zustand-updating-draft-states-basic-demo-zkp22g),
-- [Advanced](https://codesandbox.io/s/zustand-updating-draft-states-advanced-demo-3znqzk).
+- [Basic](https://codesandbox.io/p/sandbox/zustand-updating-draft-states-basic-demo-forked-96mkdw),
+- [Advanced](https://codesandbox.io/p/sandbox/zustand-updating-draft-states-advanced-demo-forked-phkzzg).

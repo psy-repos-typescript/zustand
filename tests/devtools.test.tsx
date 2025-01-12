@@ -1,23 +1,13 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  jest,
-} from '@jest/globals'
-import { StoreApi } from 'zustand/vanilla'
-
-const getImports = async () => {
-  const { devtools } = await import('zustand/middleware')
-  const { createStore } = await import('zustand/vanilla')
-  return { createStore, devtools }
-}
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Mock } from 'vitest'
+import { devtools, redux } from 'zustand/middleware'
+import { createStore } from 'zustand/vanilla'
+import type { StoreApi } from 'zustand/vanilla'
 
 type TupleOfEqualLengthH<
   Arr extends unknown[],
   T,
-  Acc extends T[]
+  Acc extends T[],
 > = Arr extends [unknown, ...infer Rest]
   ? TupleOfEqualLengthH<Rest, T, [T, ...Acc]>
   : Acc
@@ -28,12 +18,12 @@ type TupleOfEqualLength<Arr extends unknown[], T> = number extends Arr['length']
 type Connection = {
   subscribers: ((message: unknown) => void)[]
   api: {
-    subscribe: jest.Mock<(f: (message: unknown) => void) => void>
-    unsubscribe: jest.Mock<any>
-    send: jest.Mock<any>
-    init: jest.Mock<any>
-    error: jest.Mock<any>
-    dispatch?: jest.Mock<any>
+    subscribe: Mock<any>
+    unsubscribe: Mock<any>
+    send: Mock<any>
+    init: Mock<any>
+    error: Mock<any>
+    dispatch?: Mock<any>
   }
 }
 const namedConnections = new Map<string | undefined, Connection>()
@@ -94,7 +84,7 @@ function getKeyFromOptions(options: any): string | undefined {
 }
 
 const extensionConnector = {
-  connect: jest.fn((options: any) => {
+  connect: vi.fn((options: any) => {
     const key = getKeyFromOptions(options)
     //console.log('options', options)
     const areNameUndefinedMapsNeeded =
@@ -104,21 +94,21 @@ const extensionConnector = {
       : namedConnections
     const subscribers: Connection['subscribers'] = []
     const api = {
-      subscribe: jest.fn((f: (m: unknown) => void) => {
+      subscribe: vi.fn((f: (m: unknown) => void) => {
         subscribers.push(f)
         return () => {}
       }),
-      unsubscribe: jest.fn(),
-      send: jest.fn(),
-      init: jest.fn(),
-      error: jest.fn(),
+      unsubscribe: vi.fn(),
+      send: vi.fn(),
+      init: vi.fn(),
+      error: vi.fn(),
     }
     connectionMap.set(
       areNameUndefinedMapsNeeded ? options.testConnectionId : key,
       {
         subscribers,
         api,
-      }
+      },
     )
     return api
   }),
@@ -126,14 +116,13 @@ const extensionConnector = {
 ;(window as any).__REDUX_DEVTOOLS_EXTENSION__ = extensionConnector
 
 beforeEach(() => {
-  jest.resetModules()
+  vi.resetModules()
   extensionConnector.connect.mockClear()
   namedConnections.clear()
   unnamedConnections.clear()
 })
 
 it('connects to the extension by passing the options and initializes', async () => {
-  const { devtools, createStore } = await getImports()
   const options = { name: 'test', foo: 'bar' }
   const initialState = { count: 0 }
   createStore(devtools(() => initialState, { enabled: true, ...options }))
@@ -148,7 +137,7 @@ describe('If there is no extension installed...', () => {
   let savedConsoleWarn: any
   beforeEach(() => {
     savedConsoleWarn = console.warn
-    console.warn = jest.fn()
+    console.warn = vi.fn()
     ;(window as any).__REDUX_DEVTOOLS_EXTENSION__ = undefined
   })
   afterEach(() => {
@@ -157,40 +146,19 @@ describe('If there is no extension installed...', () => {
   })
 
   it('does not throw', async () => {
-    const { devtools, createStore } = await getImports()
     expect(() => {
       createStore(devtools(() => ({ count: 0 })))
     }).not.toThrow()
   })
 
-  it('does not warn if not enabled', async () => {
-    const { devtools, createStore } = await getImports()
+  it('does not warn', async () => {
     createStore(devtools(() => ({ count: 0 })))
-    expect(console.warn).not.toBeCalled()
-  })
-
-  it('[DEV-ONLY] warns if enabled in dev mode', async () => {
-    const { devtools, createStore } = await getImports()
-    createStore(devtools(() => ({ count: 0 }), { enabled: true }))
-    expect(console.warn).toBeCalled()
-  })
-
-  it.skip('[PRD-ONLY] does not warn if not in dev env', async () => {
-    const { devtools, createStore } = await getImports()
-    createStore(devtools(() => ({ count: 0 })))
-    expect(console.warn).not.toBeCalled()
-  })
-
-  it.skip('[PRD-ONLY] does not warn if not in dev env even if enabled', async () => {
-    const { devtools, createStore } = await getImports()
-    createStore(devtools(() => ({ count: 0 }), { enabled: true }))
     expect(console.warn).not.toBeCalled()
   })
 })
 
 describe('When state changes...', () => {
   it("sends { type: setStateName || 'anonymous`, ...rest } as the action with current state", async () => {
-    const { devtools, createStore } = await getImports()
     const options = {
       name: 'testOptionsName',
       enabled: true,
@@ -201,7 +169,7 @@ describe('When state changes...', () => {
     const [connection] = getNamedConnectionApis(options.name)
     expect(connection.send).toHaveBeenLastCalledWith(
       { type: 'testSetStateName' },
-      { count: 10, foo: 'bar' }
+      { count: 10, foo: 'bar' },
     )
 
     api.setState({ count: 15 }, false, {
@@ -210,13 +178,13 @@ describe('When state changes...', () => {
     })
     expect(connection.send).toHaveBeenLastCalledWith(
       { type: 'testSetStateName', payload: 15 },
-      { count: 15, foo: 'bar' }
+      { count: 15, foo: 'bar' },
     )
 
     api.setState({ count: 5, foo: 'baz' }, true)
     expect(connection.send).toHaveBeenLastCalledWith(
       { type: 'anonymous' },
-      { count: 5, foo: 'baz' }
+      { count: 5, foo: 'baz' },
     )
   })
 })
@@ -224,10 +192,9 @@ describe('When state changes...', () => {
 describe('when it receives a message of type...', () => {
   describe('ACTION...', () => {
     it('does nothing', async () => {
-      const { devtools, createStore } = await getImports()
       const initialState = { count: 0 }
       const api = createStore(devtools(() => initialState, { enabled: true }))
-      const setState = jest.spyOn(api, 'setState')
+      const setState = vi.spyOn(api, 'setState')
 
       const [subscriber] = getNamedConnectionSubscribers(undefined)
       subscriber({
@@ -240,7 +207,6 @@ describe('when it receives a message of type...', () => {
     })
 
     it('unless action type is __setState', async () => {
-      const { devtools, createStore } = await getImports()
       const initialState = { count: 0 }
       const api = createStore(devtools(() => initialState, { enabled: true }))
 
@@ -254,11 +220,10 @@ describe('when it receives a message of type...', () => {
     })
 
     it('does nothing even if there is `api.dispatch`', async () => {
-      const { devtools, createStore } = await getImports()
       const initialState = { count: 0 }
       const api = createStore(devtools(() => initialState, { enabled: true }))
-      ;(api as any).dispatch = jest.fn()
-      const setState = jest.spyOn(api, 'setState')
+      ;(api as any).dispatch = vi.fn()
+      const setState = vi.spyOn(api, 'setState')
 
       const [connectionSubscriber] = getNamedConnectionSubscribers(undefined)
       connectionSubscriber({
@@ -272,12 +237,11 @@ describe('when it receives a message of type...', () => {
     })
 
     it('dispatches with `api.dispatch` when `api.dispatchFromDevtools` is set to true', async () => {
-      const { devtools, createStore } = await getImports()
       const initialState = { count: 0 }
       const api = createStore(devtools(() => initialState, { enabled: true }))
-      ;(api as any).dispatch = jest.fn()
+      ;(api as any).dispatch = vi.fn()
       ;(api as any).dispatchFromDevtools = true
-      const setState = jest.spyOn(api, 'setState')
+      const setState = vi.spyOn(api, 'setState')
 
       const [connectionSubscriber] = getNamedConnectionSubscribers(undefined)
       connectionSubscriber({
@@ -293,14 +257,13 @@ describe('when it receives a message of type...', () => {
     })
 
     it('does not throw for unsupported payload', async () => {
-      const { devtools, createStore } = await getImports()
       const initialState = { count: 0 }
       const api = createStore(devtools(() => initialState, { enabled: true }))
-      ;(api as any).dispatch = jest.fn()
+      ;(api as any).dispatch = vi.fn()
       ;(api as any).dispatchFromDevtools = true
-      const setState = jest.spyOn(api, 'setState')
+      const setState = vi.spyOn(api, 'setState')
       const originalConsoleError = console.error
-      console.error = jest.fn()
+      console.error = vi.fn()
 
       const [connectionSubscriber] = getNamedConnectionSubscribers(undefined)
       expect(() => {
@@ -318,7 +281,7 @@ describe('when it receives a message of type...', () => {
           } catch (e) {
             return e
           }
-        })()
+        })(),
       )
 
       expect(() => {
@@ -329,7 +292,7 @@ describe('when it receives a message of type...', () => {
       }).not.toThrow()
 
       expect(console.error).toHaveBeenLastCalledWith(
-        '[zustand devtools middleware] Unsupported action format'
+        '[zustand devtools middleware] Unsupported action format',
       )
 
       expect(api.getState()).toBe(initialState)
@@ -342,7 +305,6 @@ describe('when it receives a message of type...', () => {
 
   describe('DISPATCH and payload of type...', () => {
     it('RESET, it inits with initial state', async () => {
-      const { devtools, createStore } = await getImports()
       const initialState = { count: 0 }
       const api = createStore(devtools(() => initialState, { enabled: true }))
       api.setState({ count: 1 })
@@ -361,7 +323,6 @@ describe('when it receives a message of type...', () => {
     })
 
     it('COMMIT, it inits with current state', async () => {
-      const { devtools, createStore } = await getImports()
       const initialState = { count: 0 }
       const api = createStore(devtools(() => initialState, { enabled: true }))
       api.setState({ count: 2 })
@@ -380,8 +341,7 @@ describe('when it receives a message of type...', () => {
     })
 
     describe('ROLLBACK...', () => {
-      it('it updates state without recording and inits with `message.state`', async () => {
-        const { devtools, createStore } = await getImports()
+      it('updates state without recording and inits with `message.state`', async () => {
         const initialState = { count: 0, increment: () => {} }
         const api = createStore(devtools(() => initialState, { enabled: true }))
         const newState = { foo: 'bar' }
@@ -404,12 +364,11 @@ describe('when it receives a message of type...', () => {
       })
 
       it('does not throw for unparsable `message.state`', async () => {
-        const { devtools, createStore } = await getImports()
         const increment = () => {}
         const initialState = { count: 0, increment }
         const api = createStore(devtools(() => initialState, { enabled: true }))
         const originalConsoleError = console.error
-        console.error = jest.fn()
+        console.error = vi.fn()
 
         const [connection] = getNamedConnectionApis(undefined)
         connection.init.mockClear()
@@ -429,7 +388,7 @@ describe('when it receives a message of type...', () => {
             } catch (e) {
               return e
             }
-          })()
+          })(),
         )
         expect(api.getState()).toBe(initialState)
         expect(connection.init).not.toBeCalled()
@@ -441,8 +400,7 @@ describe('when it receives a message of type...', () => {
 
     describe('JUMP_TO_STATE...', () => {
       const increment = () => {}
-      it('it updates state without recording with `message.state`', async () => {
-        const { devtools, createStore } = await getImports()
+      it('updates state without recording with `message.state`', async () => {
         const initialState = { count: 0, increment }
         const api = createStore(devtools(() => initialState, { enabled: true }))
         const newState = { foo: 'bar' }
@@ -460,11 +418,10 @@ describe('when it receives a message of type...', () => {
       })
 
       it('does not throw for unparsable `message.state`', async () => {
-        const { devtools, createStore } = await getImports()
         const initialState = { count: 0, increment: () => {} }
         const api = createStore(devtools(() => initialState, { enabled: true }))
         const originalConsoleError = console.error
-        console.error = jest.fn()
+        console.error = vi.fn()
 
         const [connection] = getNamedConnectionApis(undefined)
         connection.send.mockClear()
@@ -483,7 +440,7 @@ describe('when it receives a message of type...', () => {
             } catch (e) {
               return e
             }
-          })()
+          })(),
         )
         expect(api.getState()).toBe(initialState)
         expect(connection.send).not.toBeCalled()
@@ -493,8 +450,7 @@ describe('when it receives a message of type...', () => {
     })
 
     describe('JUMP_TO_ACTION...', () => {
-      it('it updates state without recording with `message.state`', async () => {
-        const { devtools, createStore } = await getImports()
+      it('updates state without recording with `message.state`', async () => {
         const initialState = { count: 0, increment: () => {} }
         const api = createStore(devtools(() => initialState, { enabled: true }))
         const newState = { foo: 'bar' }
@@ -512,12 +468,11 @@ describe('when it receives a message of type...', () => {
       })
 
       it('does not throw for unparsable `message.state`', async () => {
-        const { devtools, createStore } = await getImports()
         const increment = () => {}
         const initialState = { count: 0, increment }
         const api = createStore(devtools(() => initialState, { enabled: true }))
         const originalConsoleError = console.error
-        console.error = jest.fn()
+        console.error = vi.fn()
 
         const [connection] = getNamedConnectionApis(undefined)
         connection.send.mockClear()
@@ -536,7 +491,7 @@ describe('when it receives a message of type...', () => {
             } catch (e) {
               return e
             }
-          })()
+          })(),
         )
         expect(api.getState()).toBe(initialState)
         expect(connection.send).not.toBeCalled()
@@ -546,7 +501,6 @@ describe('when it receives a message of type...', () => {
     })
 
     it('IMPORT_STATE, it updates state without recording and inits the last computedState', async () => {
-      const { devtools, createStore } = await getImports()
       const initialState = { count: 0, increment: () => {} }
       const api = createStore(devtools(() => initialState, { enabled: true }))
       const nextLiftedState = {
@@ -571,7 +525,6 @@ describe('when it receives a message of type...', () => {
     })
 
     it('PAUSE_RECORDING, it toggles the sending of actions', async () => {
-      const { devtools, createStore } = await getImports()
       const api = createStore(devtools(() => ({ count: 0 }), { enabled: true }))
 
       api.setState({ count: 1 }, false, 'increment')
@@ -579,7 +532,7 @@ describe('when it receives a message of type...', () => {
       const [connectionSubscriber] = getNamedConnectionSubscribers(undefined)
       expect(connection.send).toHaveBeenLastCalledWith(
         { type: 'increment' },
-        { count: 1 }
+        { count: 1 },
       )
       connectionSubscriber({
         type: 'DISPATCH',
@@ -589,7 +542,7 @@ describe('when it receives a message of type...', () => {
       api.setState({ count: 2 }, false, 'increment')
       expect(connection.send).toHaveBeenLastCalledWith(
         { type: 'increment' },
-        { count: 1 }
+        { count: 1 },
       )
       connectionSubscriber({
         type: 'DISPATCH',
@@ -599,7 +552,7 @@ describe('when it receives a message of type...', () => {
       api.setState({ count: 3 }, false, 'increment')
       expect(connection.send).toHaveBeenLastCalledWith(
         { type: 'increment' },
-        { count: 3 }
+        { count: 3 },
       )
     })
   })
@@ -609,26 +562,24 @@ describe('with redux middleware', () => {
   let api: StoreApi<{
     count: number
     dispatch: (
-      action: { type: 'INCREMENT' } | { type: 'DECREMENT' }
+      action: { type: 'INCREMENT' } | { type: 'DECREMENT' },
     ) => { type: 'INCREMENT' } | { type: 'DECREMENT' }
   }>
 
   it('works as expected', async () => {
-    const { devtools, redux } = await import('zustand/middleware')
-    const { createStore } = await import('zustand/vanilla')
     api = createStore(
       devtools(
         redux(
           (
             { count },
-            { type }: { type: 'INCREMENT' } | { type: 'DECREMENT' }
+            { type }: { type: 'INCREMENT' } | { type: 'DECREMENT' },
           ) => ({
             count: count + (type === 'INCREMENT' ? 1 : -1),
           }),
-          { count: 0 }
+          { count: 0 },
         ),
-        { enabled: true }
-      )
+        { enabled: true },
+      ),
     )
     ;(api as any).dispatch({ type: 'INCREMENT' })
     ;(api as any).dispatch({ type: 'INCREMENT' })
@@ -661,43 +612,51 @@ describe('with redux middleware', () => {
 
   it('[DEV-ONLY] warns about misusage', () => {
     const originalConsoleWarn = console.warn
-    console.warn = jest.fn()
+    console.warn = vi.fn()
     ;(api as any).dispatch({ type: '__setState' as any })
     expect(console.warn).toHaveBeenLastCalledWith(
       '[zustand devtools middleware] "__setState" action type is reserved ' +
-        'to set state from the devtools. Avoid using it.'
+        'to set state from the devtools. Avoid using it.',
     )
 
     console.warn = originalConsoleWarn
   })
 })
 
-it('works in non-browser env', async () => {
-  const { devtools, createStore } = await getImports()
-  const originalWindow = global.window
-  global.window = undefined as any
+describe('different envs', () => {
+  let savedConsoleWarn: any
+  beforeEach(() => {
+    savedConsoleWarn = console.warn
+    console.warn = vi.fn()
+  })
+  afterEach(() => {
+    console.warn = savedConsoleWarn
+  })
 
-  expect(() => {
-    createStore(devtools(() => ({ count: 0 }), { enabled: true }))
-  }).not.toThrow()
+  it('works in non-browser env', async () => {
+    const originalWindow = global.window
+    global.window = undefined as any
 
-  global.window = originalWindow
-})
+    expect(() => {
+      createStore(devtools(() => ({ count: 0 }), { enabled: true }))
+    }).not.toThrow()
 
-it('works in react native env', async () => {
-  const { devtools, createStore } = await getImports()
-  const originalWindow = global.window
-  global.window = {} as any
+    global.window = originalWindow
+  })
 
-  expect(() => {
-    createStore(devtools(() => ({ count: 0 }), { enabled: true }))
-  }).not.toThrow()
+  it('works in react native env', async () => {
+    const originalWindow = global.window
+    global.window = {} as any
 
-  global.window = originalWindow
+    expect(() => {
+      createStore(devtools(() => ({ count: 0 }), { enabled: true }))
+    }).not.toThrow()
+
+    global.window = originalWindow
+  })
 })
 
 it('preserves isRecording after setting from devtools', async () => {
-  const { devtools, createStore } = await getImports()
   const api = createStore(devtools(() => ({ count: 0 }), { enabled: true }))
   const [connection] = getNamedConnectionApis(undefined)
   const [connectionSubscriber] = getNamedConnectionSubscribers(undefined)
@@ -717,7 +676,7 @@ it('preserves isRecording after setting from devtools', async () => {
 /* features:
  * [] if name is undefined - use multiple devtools connections.
  * [] if name and store is defined - use connection for specific 'name'.
- * [] if two stores are coonected to one 'name' group and.
+ * [] if two stores are connected to one 'name' group and.
  *      another connected to another 'name' group, then feature should work
  * [] check actions with this feature, for multiple stores that store prefixes are added -
  * [] - reset
@@ -729,7 +688,6 @@ it('preserves isRecording after setting from devtools', async () => {
 
 describe('when redux connection was called on multiple stores with `name` undefined in `devtools` options', () => {
   it('should create separate connection for each devtools store with .connect call', async () => {
-    const { devtools, createStore } = await getImports()
     const options1 = { foo: 'bar', testConnectionId: 'asdf' }
     const options2 = { foo: 'barr', testConnectionId: '123asd' }
     const initialState1 = { count: 0 }
@@ -743,7 +701,6 @@ describe('when redux connection was called on multiple stores with `name` undefi
   })
 
   it('should call .init on each different connection object', async () => {
-    const { devtools, createStore } = await getImports()
     const options1 = { foo: 'bar', testConnectionId: 'asdf' }
     const options2 = { foo: 'barr', testConnectionId: '123asd' }
     const initialState1 = { count: 0 }
@@ -754,22 +711,27 @@ describe('when redux connection was called on multiple stores with `name` undefi
 
     const [conn1, conn2] = getUnnamedConnectionApis(
       options1.testConnectionId,
-      options2.testConnectionId
+      options2.testConnectionId,
     )
     expect(conn1.init).toHaveBeenCalledWith(initialState1)
     expect(conn2.init).toHaveBeenCalledWith(initialState2)
   })
 
   describe('when `store` property was provided in `devtools` call in options', () => {
-    it('should create single connection for all indernal calls of .connect and `store` is not passed to .connect', async () => {
-      const { devtools, createStore } = await getImports()
+    it('should create single connection for all internal calls of .connect and `store` is not passed to .connect', async () => {
+      const { devtools: newDevtools } = await import('zustand/middleware')
+
       const options1 = { store: 'store1123', foo: 'bar1' }
       const options2 = { store: 'store2313132', foo: 'bar2' }
       const initialState1 = { count: 0 }
       const initialState2 = { count1: 1 }
 
-      createStore(devtools(() => initialState1, { enabled: true, ...options1 }))
-      createStore(devtools(() => initialState2, { enabled: true, ...options2 }))
+      createStore(
+        newDevtools(() => initialState1, { enabled: true, ...options1 }),
+      )
+      createStore(
+        newDevtools(() => initialState2, { enabled: true, ...options2 }),
+      )
 
       expect(extensionConnector.connect).toHaveBeenCalledTimes(1)
       expect(extensionConnector.connect).toHaveBeenCalledWith({
@@ -778,14 +740,19 @@ describe('when redux connection was called on multiple stores with `name` undefi
     })
 
     it('should call `.init` on single connection with combined states after each `create(devtools` call', async () => {
-      const { devtools, createStore } = await getImports()
+      const { devtools: newDevtools } = await import('zustand/middleware')
+
       const options1 = { store: 'store12' }
       const options2 = { store: 'store21' }
       const initialState1 = { count1: 0 }
       const initialState2 = { count2: 1 }
 
-      createStore(devtools(() => initialState1, { enabled: true, ...options1 }))
-      createStore(devtools(() => initialState2, { enabled: true, ...options2 }))
+      createStore(
+        newDevtools(() => initialState1, { enabled: true, ...options1 }),
+      )
+      createStore(
+        newDevtools(() => initialState2, { enabled: true, ...options2 }),
+      )
 
       expect(extensionConnector.connect).toHaveBeenCalledTimes(1)
       const [connection] = getNamedConnectionApis(undefined)
@@ -804,7 +771,6 @@ describe('when redux connection was called on multiple stores with `name` undefi
 describe('when redux connection was called on multiple stores with `name` provided in `devtools` options', () => {
   describe('when same `name` is provided to all stores in devtools options', () => {
     it('should call .connect of redux extension with `name` that was passed from `devtools` options', async () => {
-      const { devtools, createStore } = await getImports()
       const connectionName = 'test'
       const options1 = { name: connectionName, store: 'store1123', foo: 'bar1' }
       const options2 = { name: connectionName, store: 'store1414', foo: 'bar1' }
@@ -824,7 +790,6 @@ describe('when redux connection was called on multiple stores with `name` provid
 
   describe('when different `name` props were provided for different group of stores in devtools options', () => {
     it('should call .connect of redux extension with `name` that was passed from `devtools` options', async () => {
-      const { devtools, createStore } = await getImports()
       const connectionNameGroup1 = 'test1'
       const connectionNameGroup2 = 'test2'
       const options1 = {
@@ -869,7 +834,7 @@ describe('when redux connection was called on multiple stores with `name` provid
     })
 
     it('should call `.init` on single connection with combined states after each `create(devtools` call', async () => {
-      const { devtools, createStore } = await getImports()
+      const { devtools: newDevtools } = await import('zustand/middleware')
       const connectionNameGroup1 = 'test1'
       const connectionNameGroup2 = 'test2'
       const options1 = {
@@ -897,15 +862,23 @@ describe('when redux connection was called on multiple stores with `name` provid
       const initialState3 = { count: 5 }
       const initialState4 = { count: 7 }
 
-      createStore(devtools(() => initialState1, { enabled: true, ...options1 }))
-      createStore(devtools(() => initialState2, { enabled: true, ...options2 }))
-      createStore(devtools(() => initialState3, { enabled: true, ...options3 }))
-      createStore(devtools(() => initialState4, { enabled: true, ...options4 }))
+      createStore(
+        newDevtools(() => initialState1, { enabled: true, ...options1 }),
+      )
+      createStore(
+        newDevtools(() => initialState2, { enabled: true, ...options2 }),
+      )
+      createStore(
+        newDevtools(() => initialState3, { enabled: true, ...options3 }),
+      )
+      createStore(
+        newDevtools(() => initialState4, { enabled: true, ...options4 }),
+      )
 
       expect(extensionConnector.connect).toHaveBeenCalledTimes(2)
       const [connection1, connection2] = getNamedConnectionApis(
         connectionNameGroup1,
-        connectionNameGroup2
+        connectionNameGroup2,
       )
       expect(connection1.init).toHaveBeenCalledTimes(2)
       expect(connection1.init).toHaveBeenNthCalledWith(1, {
@@ -926,18 +899,17 @@ describe('when redux connection was called on multiple stores with `name` provid
     })
 
     it('preserves isRecording after setting from devtools on proper connection subscriber', async () => {
-      const { devtools, createStore } = await getImports()
       const options1 = { name: 'asdf1' }
       const options2 = { name: 'asdf2' }
       const api1 = createStore(
-        devtools(() => ({ count: 0 }), { enabled: true, ...options1 })
+        devtools(() => ({ count: 0 }), { enabled: true, ...options1 }),
       )
       createStore(
-        devtools(() => ({ count: 0 }), { enabled: true, ...options2 })
+        devtools(() => ({ count: 0 }), { enabled: true, ...options2 }),
       )
       const connections = getNamedConnectionApis(options1.name, options2.name)
       const [connectionSubscriber] = getNamedConnectionSubscribers(
-        options1.name
+        options1.name,
       )
       connectionSubscriber({
         type: 'DISPATCH',
@@ -956,19 +928,17 @@ describe('when redux connection was called on multiple stores with `name` provid
       let api1: StoreApi<{
         count: number
         dispatch: (
-          action: { type: 'INCREMENT' } | { type: 'DECREMENT' }
+          action: { type: 'INCREMENT' } | { type: 'DECREMENT' },
         ) => { type: 'INCREMENT' } | { type: 'DECREMENT' }
       }>
       let api2: StoreApi<{
         count: number
         dispatch: (
-          action: { type: 'INCREMENT' } | { type: 'DECREMENT' }
+          action: { type: 'INCREMENT' } | { type: 'DECREMENT' },
         ) => { type: 'INCREMENT' } | { type: 'DECREMENT' }
       }>
 
       it('works as expected', async () => {
-        const { devtools, redux } = await import('zustand/middleware')
-        const { createStore } = await import('zustand/vanilla')
         const options1 = { testConnectionId: 'asdf' }
         const options2 = { testConnectionId: '2f' }
         api1 = createStore(
@@ -976,28 +946,28 @@ describe('when redux connection was called on multiple stores with `name` provid
             redux(
               (
                 { count },
-                { type }: { type: 'INCREMENT' } | { type: 'DECREMENT' }
+                { type }: { type: 'INCREMENT' } | { type: 'DECREMENT' },
               ) => ({
                 count: count + (type === 'INCREMENT' ? 1 : -1),
               }),
-              { count: 0 }
+              { count: 0 },
             ),
-            { enabled: true, ...options1 }
-          )
+            { enabled: true, ...options1 },
+          ),
         )
         api2 = createStore(
           devtools(
             redux(
               (
                 { count },
-                { type }: { type: 'INCREMENT' } | { type: 'DECREMENT' }
+                { type }: { type: 'INCREMENT' } | { type: 'DECREMENT' },
               ) => ({
                 count: count + (type === 'INCREMENT' ? 1 : -1),
               }),
-              { count: 10 }
+              { count: 10 },
             ),
-            { enabled: true, ...options2 }
-          )
+            { enabled: true, ...options2 },
+          ),
         )
         ;(api1 as any).dispatch({ type: 'INCREMENT' })
         ;(api1 as any).dispatch({ type: 'INCREMENT' })
@@ -1005,12 +975,12 @@ describe('when redux connection was called on multiple stores with `name` provid
         ;(api2 as any).dispatch({ type: 'INCREMENT' })
         const [connection1, connection2] = getUnnamedConnectionApis(
           options1.testConnectionId,
-          options2.testConnectionId
+          options2.testConnectionId,
         )
         const [connectionSubscriber1, connectionSubscriber2] =
           getUnnamedConnectionSubscribers(
             options1.testConnectionId,
-            options2.testConnectionId
+            options2.testConnectionId,
           )
         connectionSubscriber1({
           type: 'ACTION',
@@ -1065,7 +1035,6 @@ describe('when redux connection was called on multiple stores with `name` provid
 describe('when create devtools was called multiple times with `name` option undefined', () => {
   describe('When state changes...', () => {
     it("sends { type: setStateName || 'anonymous`, ...rest } as the action with current state, isolated from other connections", async () => {
-      const { devtools, createStore } = await getImports()
       const options1 = {
         enabled: true,
         testConnectionId: '123',
@@ -1079,7 +1048,7 @@ describe('when create devtools was called multiple times with `name` option unde
         testConnectionId: '412',
       }
       const api1 = createStore(
-        devtools(() => ({ count: 0, foo: 'bar' }), options1)
+        devtools(() => ({ count: 0, foo: 'bar' }), options1),
       )
       createStore(devtools(() => ({ count: 0, foo: 'bar1' }), options2))
       createStore(devtools(() => ({ count: 0, foo: 'bar2' }), options3))
@@ -1088,11 +1057,11 @@ describe('when create devtools was called multiple times with `name` option unde
       const [connection1, connection2, connection3] = getUnnamedConnectionApis(
         options1.testConnectionId,
         options2.testConnectionId,
-        options3.testConnectionId
+        options3.testConnectionId,
       )
       expect(connection1.send).toHaveBeenLastCalledWith(
         { type: 'testSetStateName' },
-        { count: 10, foo: 'bar' }
+        { count: 10, foo: 'bar' },
       )
       expect(connection2.send).not.toBeCalled()
       expect(connection3.send).not.toBeCalled()
@@ -1103,7 +1072,7 @@ describe('when create devtools was called multiple times with `name` option unde
       })
       expect(connection1.send).toHaveBeenLastCalledWith(
         { type: 'testSetStateName', payload: 15 },
-        { count: 15, foo: 'bar' }
+        { count: 15, foo: 'bar' },
       )
       expect(connection2.send).not.toBeCalled()
       expect(connection3.send).not.toBeCalled()
@@ -1111,7 +1080,7 @@ describe('when create devtools was called multiple times with `name` option unde
       api1.setState({ count: 5, foo: 'baz' }, true)
       expect(connection1.send).toHaveBeenLastCalledWith(
         { type: 'anonymous' },
-        { count: 5, foo: 'baz' }
+        { count: 5, foo: 'baz' },
       )
       expect(connection2.send).not.toBeCalled()
       expect(connection3.send).not.toBeCalled()
@@ -1121,7 +1090,6 @@ describe('when create devtools was called multiple times with `name` option unde
   describe('when it receives a message of type...', () => {
     describe('ACTION...', () => {
       it('does nothing, connections isolated from each other', async () => {
-        const { devtools, createStore } = await getImports()
         const options1 = { testConnectionId: '123' }
         const options2 = { testConnectionId: '231' }
         const options3 = { testConnectionId: '4342' }
@@ -1132,26 +1100,26 @@ describe('when create devtools was called multiple times with `name` option unde
           devtools(() => initialState1, {
             enabled: true,
             ...options1,
-          })
+          }),
         )
         const api2 = createStore(
           devtools(() => initialState2, {
             enabled: true,
             ...options2,
-          })
+          }),
         )
         const api3 = createStore(
           devtools(() => initialState3, {
             enabled: true,
             ...options3,
-          })
+          }),
         )
-        const setState1 = jest.spyOn(api1, 'setState')
-        const setState2 = jest.spyOn(api2, 'setState')
-        const setState3 = jest.spyOn(api3, 'setState')
+        const setState1 = vi.spyOn(api1, 'setState')
+        const setState2 = vi.spyOn(api2, 'setState')
+        const setState3 = vi.spyOn(api3, 'setState')
 
         const [subscriber] = getUnnamedConnectionSubscribers(
-          options1.testConnectionId
+          options1.testConnectionId,
         )
         subscriber({
           type: 'ACTION',
@@ -1167,7 +1135,6 @@ describe('when create devtools was called multiple times with `name` option unde
       })
 
       it('unless action type is __setState, connections isolated from each other', async () => {
-        const { devtools, createStore } = await getImports()
         const options1 = { testConnectionId: 'asdf' }
         const options2 = { testConnectionId: '2f' }
         const options3 = { testConnectionId: 'd2e' }
@@ -1175,17 +1142,17 @@ describe('when create devtools was called multiple times with `name` option unde
         const initialState2 = { count: 2 }
         const initialState3 = { count: 5 }
         const api1 = createStore(
-          devtools(() => initialState1, { enabled: true, ...options1 })
+          devtools(() => initialState1, { enabled: true, ...options1 }),
         )
         const api2 = createStore(
-          devtools(() => initialState2, { enabled: true, ...options2 })
+          devtools(() => initialState2, { enabled: true, ...options2 }),
         )
         const api3 = createStore(
-          devtools(() => initialState3, { enabled: true, ...options3 })
+          devtools(() => initialState3, { enabled: true, ...options3 }),
         )
 
         const [connectionSubscriber] = getUnnamedConnectionSubscribers(
-          options1.testConnectionId
+          options1.testConnectionId,
         )
         connectionSubscriber({
           type: 'ACTION',
@@ -1198,7 +1165,6 @@ describe('when create devtools was called multiple times with `name` option unde
       })
 
       it('does nothing even if there is `api.dispatch`, connections isolated from each other', async () => {
-        const { devtools, createStore } = await getImports()
         const options1 = { testConnectionId: 'asdf' }
         const options2 = { testConnectionId: '2f' }
         const options3 = { testConnectionId: 'd2e' }
@@ -1206,25 +1172,25 @@ describe('when create devtools was called multiple times with `name` option unde
         const initialState2 = { count: 2 }
         const initialState3 = { count: 5 }
         const api1 = createStore(
-          devtools(() => initialState1, { enabled: true, ...options1 })
+          devtools(() => initialState1, { enabled: true, ...options1 }),
         )
         const api2 = createStore(
-          devtools(() => initialState2, { enabled: true, ...options2 })
+          devtools(() => initialState2, { enabled: true, ...options2 }),
         )
         const api3 = createStore(
-          devtools(() => initialState3, { enabled: true, ...options3 })
+          devtools(() => initialState3, { enabled: true, ...options3 }),
         )
-        ;(api1 as any).dispatch = jest.fn()
-        ;(api2 as any).dispatch = jest.fn()
-        ;(api3 as any).dispatch = jest.fn()
-        const setState1 = jest.spyOn(api1, 'setState')
-        const setState2 = jest.spyOn(api2, 'setState')
-        const setState3 = jest.spyOn(api3, 'setState')
+        ;(api1 as any).dispatch = vi.fn()
+        ;(api2 as any).dispatch = vi.fn()
+        ;(api3 as any).dispatch = vi.fn()
+        const setState1 = vi.spyOn(api1, 'setState')
+        const setState2 = vi.spyOn(api2, 'setState')
+        const setState3 = vi.spyOn(api3, 'setState')
 
         const subscribers = getUnnamedConnectionSubscribers(
           options1.testConnectionId,
           options2.testConnectionId,
-          options3.testConnectionId
+          options3.testConnectionId,
         )
         const testPayload = {
           type: 'ACTION',
@@ -1244,7 +1210,6 @@ describe('when create devtools was called multiple times with `name` option unde
       })
 
       it('dispatches with `api.dispatch` when `api.dispatchFromDevtools` is set to true, connections are isolated from each other', async () => {
-        const { devtools, createStore } = await getImports()
         const options1 = { testConnectionId: 'asdf' }
         const options2 = { testConnectionId: '2f' }
         const options3 = { testConnectionId: 'd2e' }
@@ -1252,28 +1217,28 @@ describe('when create devtools was called multiple times with `name` option unde
         const initialState2 = { count: 2 }
         const initialState3 = { count: 5 }
         const api1 = createStore(
-          devtools(() => initialState1, { enabled: true, ...options1 })
+          devtools(() => initialState1, { enabled: true, ...options1 }),
         )
         const api2 = createStore(
-          devtools(() => initialState2, { enabled: true, ...options2 })
+          devtools(() => initialState2, { enabled: true, ...options2 }),
         )
         const api3 = createStore(
-          devtools(() => initialState3, { enabled: true, ...options3 })
+          devtools(() => initialState3, { enabled: true, ...options3 }),
         )
-        ;(api1 as any).dispatch = jest.fn()
+        ;(api1 as any).dispatch = vi.fn()
         ;(api1 as any).dispatchFromDevtools = true
-        ;(api2 as any).dispatch = jest.fn()
+        ;(api2 as any).dispatch = vi.fn()
         ;(api2 as any).dispatchFromDevtools = true
-        ;(api3 as any).dispatch = jest.fn()
+        ;(api3 as any).dispatch = vi.fn()
         ;(api3 as any).dispatchFromDevtools = true
-        const setState1 = jest.spyOn(api1, 'setState')
-        const setState2 = jest.spyOn(api2, 'setState')
-        const setState3 = jest.spyOn(api3, 'setState')
+        const setState1 = vi.spyOn(api1, 'setState')
+        const setState2 = vi.spyOn(api2, 'setState')
+        const setState3 = vi.spyOn(api3, 'setState')
 
         const subscribers = getUnnamedConnectionSubscribers(
           options1.testConnectionId,
           options2.testConnectionId,
-          options3.testConnectionId
+          options3.testConnectionId,
         )
         const getTestPayload = (n: number) => ({
           type: 'ACTION',
@@ -1299,7 +1264,6 @@ describe('when create devtools was called multiple times with `name` option unde
       })
 
       it('does not throw for unsupported payload, connections are isolated from each other', async () => {
-        const { devtools, createStore } = await getImports()
         const options1 = { testConnectionId: 'asdf' }
         const options2 = { testConnectionId: '2f' }
         const options3 = { testConnectionId: 'd2e' }
@@ -1307,25 +1271,25 @@ describe('when create devtools was called multiple times with `name` option unde
         const initialState2 = { count: 2 }
         const initialState3 = { count: 5 }
         const api1 = createStore(
-          devtools(() => initialState1, { enabled: true, ...options1 })
+          devtools(() => initialState1, { enabled: true, ...options1 }),
         )
         const api2 = createStore(
-          devtools(() => initialState2, { enabled: true, ...options2 })
+          devtools(() => initialState2, { enabled: true, ...options2 }),
         )
         const api3 = createStore(
-          devtools(() => initialState3, { enabled: true, ...options3 })
+          devtools(() => initialState3, { enabled: true, ...options3 }),
         )
-        ;(api1 as any).dispatch = jest.fn()
+        ;(api1 as any).dispatch = vi.fn()
         ;(api1 as any).dispatchFromDevtools = true
-        ;(api2 as any).dispatch = jest.fn()
+        ;(api2 as any).dispatch = vi.fn()
         ;(api2 as any).dispatchFromDevtools = true
-        ;(api3 as any).dispatch = jest.fn()
+        ;(api3 as any).dispatch = vi.fn()
         ;(api3 as any).dispatchFromDevtools = true
-        const setState1 = jest.spyOn(api1, 'setState')
-        const setState2 = jest.spyOn(api2, 'setState')
-        const setState3 = jest.spyOn(api3, 'setState')
+        const setState1 = vi.spyOn(api1, 'setState')
+        const setState2 = vi.spyOn(api2, 'setState')
+        const setState3 = vi.spyOn(api3, 'setState')
         const originalConsoleError = console.error
-        console.error = jest.fn()
+        console.error = vi.fn()
 
         const [
           connectionSubscriber1,
@@ -1334,7 +1298,7 @@ describe('when create devtools was called multiple times with `name` option unde
         ] = getUnnamedConnectionSubscribers(
           options1.testConnectionId,
           options2.testConnectionId,
-          options3.testConnectionId
+          options3.testConnectionId,
         )
         expect(() => {
           connectionSubscriber1({
@@ -1351,7 +1315,7 @@ describe('when create devtools was called multiple times with `name` option unde
             } catch (e) {
               return e
             }
-          })()
+          })(),
         )
 
         expect(() => {
@@ -1369,7 +1333,7 @@ describe('when create devtools was called multiple times with `name` option unde
             } catch (e) {
               return e
             }
-          })()
+          })(),
         )
 
         expect(() => {
@@ -1387,7 +1351,7 @@ describe('when create devtools was called multiple times with `name` option unde
             } catch (e) {
               return e
             }
-          })()
+          })(),
         )
 
         expect(() => {
@@ -1398,7 +1362,7 @@ describe('when create devtools was called multiple times with `name` option unde
         }).not.toThrow()
         expect(console.error).toHaveBeenNthCalledWith(
           4,
-          '[zustand devtools middleware] Unsupported action format'
+          '[zustand devtools middleware] Unsupported action format',
         )
         expect(() => {
           connectionSubscriber2({
@@ -1408,7 +1372,7 @@ describe('when create devtools was called multiple times with `name` option unde
         }).not.toThrow()
         expect(console.error).toHaveBeenNthCalledWith(
           5,
-          '[zustand devtools middleware] Unsupported action format'
+          '[zustand devtools middleware] Unsupported action format',
         )
         expect(() => {
           connectionSubscriber3({
@@ -1418,7 +1382,7 @@ describe('when create devtools was called multiple times with `name` option unde
         }).not.toThrow()
         expect(console.error).toHaveBeenNthCalledWith(
           6,
-          '[zustand devtools middleware] Unsupported action format'
+          '[zustand devtools middleware] Unsupported action format',
         )
 
         expect(api1.getState()).toBe(initialState1)
@@ -1437,7 +1401,6 @@ describe('when create devtools was called multiple times with `name` option unde
 
     describe('DISPATCH and payload of type...', () => {
       it('RESET, it inits with initial state, connections are isolated from each other', async () => {
-        const { devtools, createStore } = await getImports()
         const options1 = { testConnectionId: 'asdf' }
         const options2 = { testConnectionId: '2f' }
         const options3 = { testConnectionId: 'd2e' }
@@ -1445,13 +1408,13 @@ describe('when create devtools was called multiple times with `name` option unde
         const initialState2 = { count: 2 }
         const initialState3 = { count: 5 }
         const api1 = createStore(
-          devtools(() => initialState1, { enabled: true, ...options1 })
+          devtools(() => initialState1, { enabled: true, ...options1 }),
         )
         const api2 = createStore(
-          devtools(() => initialState2, { enabled: true, ...options2 })
+          devtools(() => initialState2, { enabled: true, ...options2 }),
         )
         const api3 = createStore(
-          devtools(() => initialState3, { enabled: true, ...options3 })
+          devtools(() => initialState3, { enabled: true, ...options3 }),
         )
         api1.setState({ count: 1 })
         api2.setState({ count: 3 })
@@ -1460,14 +1423,14 @@ describe('when create devtools was called multiple times with `name` option unde
         const connections = getUnnamedConnectionApis(
           options1.testConnectionId,
           options2.testConnectionId,
-          options3.testConnectionId
+          options3.testConnectionId,
         )
         const [connection1, connection2, connection3] = connections
         connections.forEach((conn) => conn.send.mockClear())
         const subscribers = getUnnamedConnectionSubscribers(
           options1.testConnectionId,
           options2.testConnectionId,
-          options3.testConnectionId
+          options3.testConnectionId,
         )
         const action = {
           type: 'DISPATCH',
@@ -1485,7 +1448,6 @@ describe('when create devtools was called multiple times with `name` option unde
       })
 
       it('COMMIT, it inits with current state, connections are isolated from each other', async () => {
-        const { devtools, createStore } = await getImports()
         const options1 = { testConnectionId: 'asdf' }
         const options2 = { testConnectionId: '2f' }
         const options3 = { testConnectionId: 'd2e' }
@@ -1493,13 +1455,13 @@ describe('when create devtools was called multiple times with `name` option unde
         const initialState2 = { count: 2 }
         const initialState3 = { count: 5 }
         const api1 = createStore(
-          devtools(() => initialState1, { enabled: true, ...options1 })
+          devtools(() => initialState1, { enabled: true, ...options1 }),
         )
         const api2 = createStore(
-          devtools(() => initialState2, { enabled: true, ...options2 })
+          devtools(() => initialState2, { enabled: true, ...options2 }),
         )
         const api3 = createStore(
-          devtools(() => initialState3, { enabled: true, ...options3 })
+          devtools(() => initialState3, { enabled: true, ...options3 }),
         )
         api1.setState({ count: 1 })
         api2.setState({ count: 3 })
@@ -1511,13 +1473,13 @@ describe('when create devtools was called multiple times with `name` option unde
         const connections = getUnnamedConnectionApis(
           options1.testConnectionId,
           options2.testConnectionId,
-          options3.testConnectionId
+          options3.testConnectionId,
         )
         connections.forEach((conn) => conn.send.mockClear())
         const subscribers = getUnnamedConnectionSubscribers(
           options1.testConnectionId,
           options2.testConnectionId,
-          options3.testConnectionId
+          options3.testConnectionId,
         )
         const action = {
           type: 'DISPATCH',
@@ -1534,8 +1496,7 @@ describe('when create devtools was called multiple times with `name` option unde
     })
 
     describe('ROLLBACK...', () => {
-      it('it updates state without recording and inits with `message.state, connections are isolated from each other`', async () => {
-        const { devtools, createStore } = await getImports()
+      it('updates state without recording and inits with `message.state, connections are isolated from each other`', async () => {
         const options1 = { testConnectionId: 'asdf' }
         const options2 = { testConnectionId: '2f' }
         const options3 = { testConnectionId: 'd2e' }
@@ -1543,13 +1504,13 @@ describe('when create devtools was called multiple times with `name` option unde
         const initialState2 = { count: 2, increment: () => {} }
         const initialState3 = { count: 5, increment: () => {} }
         const api1 = createStore(
-          devtools(() => initialState1, { enabled: true, ...options1 })
+          devtools(() => initialState1, { enabled: true, ...options1 }),
         )
         const api2 = createStore(
-          devtools(() => initialState2, { enabled: true, ...options2 })
+          devtools(() => initialState2, { enabled: true, ...options2 }),
         )
         const api3 = createStore(
-          devtools(() => initialState3, { enabled: true, ...options3 })
+          devtools(() => initialState3, { enabled: true, ...options3 }),
         )
         const newState1 = { foo: 'bar1' }
         const newState2 = { foo: 'bar2' }
@@ -1558,7 +1519,7 @@ describe('when create devtools was called multiple times with `name` option unde
         const connections = getUnnamedConnectionApis(
           options1.testConnectionId,
           options2.testConnectionId,
-          options3.testConnectionId
+          options3.testConnectionId,
         )
         connections.forEach((conn) => conn.send.mockClear())
         const [
@@ -1568,7 +1529,7 @@ describe('when create devtools was called multiple times with `name` option unde
         ] = getUnnamedConnectionSubscribers(
           options1.testConnectionId,
           options2.testConnectionId,
-          options3.testConnectionId
+          options3.testConnectionId,
         )
         connectionSubscriber1({
           type: 'DISPATCH',
@@ -1615,7 +1576,6 @@ describe('when create devtools was called multiple times with `name` option unde
       })
 
       it('does not throw for unparsable `message.state`, connections are isolated from each other', async () => {
-        const { devtools, createStore } = await getImports()
         const increment1 = () => {}
         const increment2 = () => {}
         const increment3 = () => {}
@@ -1626,21 +1586,21 @@ describe('when create devtools was called multiple times with `name` option unde
         const initialState2 = { count: 2, increment: increment2 }
         const initialState3 = { count: 5, increment: increment3 }
         const api1 = createStore(
-          devtools(() => initialState1, { enabled: true, ...options1 })
+          devtools(() => initialState1, { enabled: true, ...options1 }),
         )
         const api2 = createStore(
-          devtools(() => initialState2, { enabled: true, ...options2 })
+          devtools(() => initialState2, { enabled: true, ...options2 }),
         )
         const api3 = createStore(
-          devtools(() => initialState3, { enabled: true, ...options3 })
+          devtools(() => initialState3, { enabled: true, ...options3 }),
         )
         const originalConsoleError = console.error
-        console.error = jest.fn()
+        console.error = vi.fn()
 
         const connections = getUnnamedConnectionApis(
           options1.testConnectionId,
           options2.testConnectionId,
-          options3.testConnectionId
+          options3.testConnectionId,
         )
         connections.forEach((conn) => conn.init.mockClear())
         connections.forEach((conn) => conn.send.mockClear())
@@ -1651,7 +1611,7 @@ describe('when create devtools was called multiple times with `name` option unde
         ] = getUnnamedConnectionSubscribers(
           options1.testConnectionId,
           options2.testConnectionId,
-          options3.testConnectionId
+          options3.testConnectionId,
         )
         connectionSubscriber1({
           type: 'DISPATCH',
@@ -1666,7 +1626,7 @@ describe('when create devtools was called multiple times with `name` option unde
             } catch (e) {
               return e
             }
-          })()
+          })(),
         )
         connectionSubscriber2({
           type: 'DISPATCH',
@@ -1681,7 +1641,7 @@ describe('when create devtools was called multiple times with `name` option unde
             } catch (e) {
               return e
             }
-          })()
+          })(),
         )
         connectionSubscriber3({
           type: 'DISPATCH',
@@ -1696,7 +1656,7 @@ describe('when create devtools was called multiple times with `name` option unde
             } catch (e) {
               return e
             }
-          })()
+          })(),
         )
 
         expect(api1.getState()).toBe(initialState1)
@@ -1716,8 +1676,7 @@ describe('when create devtools was called multiple times with `name` option unde
       const increment2 = () => {}
       const increment3 = () => {}
 
-      it('it updates state without recording with `message.state`, connections are isolated from each other', async () => {
-        const { devtools, createStore } = await getImports()
+      it('updates state without recording with `message.state`, connections are isolated from each other', async () => {
         const options1 = { testConnectionId: 'asdf' }
         const options2 = { testConnectionId: '2f' }
         const options3 = { testConnectionId: 'd2e' }
@@ -1725,13 +1684,13 @@ describe('when create devtools was called multiple times with `name` option unde
         const initialState2 = { count: 2, increment: increment2 }
         const initialState3 = { count: 5, increment: increment3 }
         const api1 = createStore(
-          devtools(() => initialState1, { enabled: true, ...options1 })
+          devtools(() => initialState1, { enabled: true, ...options1 }),
         )
         const api2 = createStore(
-          devtools(() => initialState2, { enabled: true, ...options2 })
+          devtools(() => initialState2, { enabled: true, ...options2 }),
         )
         const api3 = createStore(
-          devtools(() => initialState3, { enabled: true, ...options3 })
+          devtools(() => initialState3, { enabled: true, ...options3 }),
         )
         const newState1 = { foo: 'bar1' }
         const newState2 = { foo: 'bar2' }
@@ -1740,7 +1699,7 @@ describe('when create devtools was called multiple times with `name` option unde
         const connections = getUnnamedConnectionApis(
           options1.testConnectionId,
           options2.testConnectionId,
-          options3.testConnectionId
+          options3.testConnectionId,
         )
         connections.forEach((conn) => conn.send.mockClear())
         const [
@@ -1750,7 +1709,7 @@ describe('when create devtools was called multiple times with `name` option unde
         ] = getUnnamedConnectionSubscribers(
           options1.testConnectionId,
           options2.testConnectionId,
-          options3.testConnectionId
+          options3.testConnectionId,
         )
         connectionSubscriber1({
           type: 'DISPATCH',
@@ -1784,7 +1743,6 @@ describe('when create devtools was called multiple times with `name` option unde
       })
 
       it('does not throw for unparsable `message.state`, connections are isolated from each other', async () => {
-        const { devtools, createStore } = await getImports()
         const options1 = { testConnectionId: 'asdf' }
         const options2 = { testConnectionId: '2f' }
         const options3 = { testConnectionId: 'd2e' }
@@ -1792,21 +1750,21 @@ describe('when create devtools was called multiple times with `name` option unde
         const initialState2 = { count: 2, increment: increment2 }
         const initialState3 = { count: 5, increment: increment3 }
         const api1 = createStore(
-          devtools(() => initialState1, { enabled: true, ...options1 })
+          devtools(() => initialState1, { enabled: true, ...options1 }),
         )
         const api2 = createStore(
-          devtools(() => initialState2, { enabled: true, ...options2 })
+          devtools(() => initialState2, { enabled: true, ...options2 }),
         )
         const api3 = createStore(
-          devtools(() => initialState3, { enabled: true, ...options3 })
+          devtools(() => initialState3, { enabled: true, ...options3 }),
         )
         const originalConsoleError = console.error
-        console.error = jest.fn()
+        console.error = vi.fn()
 
         const connections = getUnnamedConnectionApis(
           options1.testConnectionId,
           options2.testConnectionId,
-          options3.testConnectionId
+          options3.testConnectionId,
         )
         connections.forEach((conn) => conn.send.mockClear())
         const [
@@ -1816,7 +1774,7 @@ describe('when create devtools was called multiple times with `name` option unde
         ] = getUnnamedConnectionSubscribers(
           options1.testConnectionId,
           options2.testConnectionId,
-          options3.testConnectionId
+          options3.testConnectionId,
         )
 
         connectionSubscriber1({
@@ -1832,7 +1790,7 @@ describe('when create devtools was called multiple times with `name` option unde
             } catch (e) {
               return e
             }
-          })()
+          })(),
         )
         connectionSubscriber2({
           type: 'DISPATCH',
@@ -1847,7 +1805,7 @@ describe('when create devtools was called multiple times with `name` option unde
             } catch (e) {
               return e
             }
-          })()
+          })(),
         )
         connectionSubscriber3({
           type: 'DISPATCH',
@@ -1862,7 +1820,7 @@ describe('when create devtools was called multiple times with `name` option unde
             } catch (e) {
               return e
             }
-          })()
+          })(),
         )
 
         expect(api1.getState()).toBe(initialState1)
@@ -1879,8 +1837,7 @@ describe('when create devtools was called multiple times with `name` option unde
       const increment2 = () => {}
       const increment3 = () => {}
 
-      it('it updates state without recording with `message.state`, connections are isolated from each other', async () => {
-        const { devtools, createStore } = await getImports()
+      it('updates state without recording with `message.state`, connections are isolated from each other', async () => {
         const options1 = { testConnectionId: 'asdf' }
         const options2 = { testConnectionId: '2f' }
         const options3 = { testConnectionId: 'd2e' }
@@ -1888,13 +1845,13 @@ describe('when create devtools was called multiple times with `name` option unde
         const initialState2 = { count: 2, increment: increment2 }
         const initialState3 = { count: 5, increment: increment3 }
         const api1 = createStore(
-          devtools(() => initialState1, { enabled: true, ...options1 })
+          devtools(() => initialState1, { enabled: true, ...options1 }),
         )
         const api2 = createStore(
-          devtools(() => initialState2, { enabled: true, ...options2 })
+          devtools(() => initialState2, { enabled: true, ...options2 }),
         )
         const api3 = createStore(
-          devtools(() => initialState3, { enabled: true, ...options3 })
+          devtools(() => initialState3, { enabled: true, ...options3 }),
         )
         const newState1 = { foo: 'bar1' }
         const newState2 = { foo: 'bar2' }
@@ -1903,7 +1860,7 @@ describe('when create devtools was called multiple times with `name` option unde
         const connections = getUnnamedConnectionApis(
           options1.testConnectionId,
           options2.testConnectionId,
-          options3.testConnectionId
+          options3.testConnectionId,
         )
         connections.forEach((conn) => conn.send.mockClear())
         const [
@@ -1913,7 +1870,7 @@ describe('when create devtools was called multiple times with `name` option unde
         ] = getUnnamedConnectionSubscribers(
           options1.testConnectionId,
           options2.testConnectionId,
-          options3.testConnectionId
+          options3.testConnectionId,
         )
 
         connectionSubscriber1({
@@ -1948,7 +1905,6 @@ describe('when create devtools was called multiple times with `name` option unde
       })
 
       it('does not throw for unparsable `message.state`, connections are isolated from each other', async () => {
-        const { devtools, createStore } = await getImports()
         const options1 = { testConnectionId: 'asdf' }
         const options2 = { testConnectionId: '2f' }
         const options3 = { testConnectionId: 'd2e' }
@@ -1956,21 +1912,21 @@ describe('when create devtools was called multiple times with `name` option unde
         const initialState2 = { count: 2, increment: increment2 }
         const initialState3 = { count: 5, increment: increment3 }
         const api1 = createStore(
-          devtools(() => initialState1, { enabled: true, ...options1 })
+          devtools(() => initialState1, { enabled: true, ...options1 }),
         )
         const api2 = createStore(
-          devtools(() => initialState2, { enabled: true, ...options2 })
+          devtools(() => initialState2, { enabled: true, ...options2 }),
         )
         const api3 = createStore(
-          devtools(() => initialState3, { enabled: true, ...options3 })
+          devtools(() => initialState3, { enabled: true, ...options3 }),
         )
         const originalConsoleError = console.error
-        console.error = jest.fn()
+        console.error = vi.fn()
 
         const connections = getUnnamedConnectionApis(
           options1.testConnectionId,
           options2.testConnectionId,
-          options3.testConnectionId
+          options3.testConnectionId,
         )
         connections.forEach((conn) => conn.send.mockClear())
         const [
@@ -1980,7 +1936,7 @@ describe('when create devtools was called multiple times with `name` option unde
         ] = getUnnamedConnectionSubscribers(
           options1.testConnectionId,
           options2.testConnectionId,
-          options3.testConnectionId
+          options3.testConnectionId,
         )
         connectionSubscriber1({
           type: 'DISPATCH',
@@ -1995,7 +1951,7 @@ describe('when create devtools was called multiple times with `name` option unde
             } catch (e) {
               return e
             }
-          })()
+          })(),
         )
         connectionSubscriber2({
           type: 'DISPATCH',
@@ -2010,7 +1966,7 @@ describe('when create devtools was called multiple times with `name` option unde
             } catch (e) {
               return e
             }
-          })()
+          })(),
         )
         connectionSubscriber3({
           type: 'DISPATCH',
@@ -2025,7 +1981,7 @@ describe('when create devtools was called multiple times with `name` option unde
             } catch (e) {
               return e
             }
-          })()
+          })(),
         )
 
         expect(api1.getState()).toBe(initialState1)
@@ -2037,7 +1993,6 @@ describe('when create devtools was called multiple times with `name` option unde
       })
 
       it('IMPORT_STATE, it updates state without recording and inits the last computedState, connections are isolated from each other', async () => {
-        const { devtools, createStore } = await getImports()
         const options1 = { testConnectionId: 'asdf' }
         const options2 = { testConnectionId: '2f' }
         const options3 = { testConnectionId: 'd2e' }
@@ -2045,13 +2000,13 @@ describe('when create devtools was called multiple times with `name` option unde
         const initialState2 = { count: 2, increment: increment2 }
         const initialState3 = { count: 5, increment: increment3 }
         const api1 = createStore(
-          devtools(() => initialState1, { enabled: true, ...options1 })
+          devtools(() => initialState1, { enabled: true, ...options1 }),
         )
         const api2 = createStore(
-          devtools(() => initialState2, { enabled: true, ...options2 })
+          devtools(() => initialState2, { enabled: true, ...options2 }),
         )
         const api3 = createStore(
-          devtools(() => initialState3, { enabled: true, ...options3 })
+          devtools(() => initialState3, { enabled: true, ...options3 }),
         )
         const nextLiftedState1 = {
           computedStates: [{ state: { count: 4 } }, { state: { count: 5 } }],
@@ -2066,7 +2021,7 @@ describe('when create devtools was called multiple times with `name` option unde
         const connections = getUnnamedConnectionApis(
           options1.testConnectionId,
           options2.testConnectionId,
-          options3.testConnectionId
+          options3.testConnectionId,
         )
         connections.forEach((conn) => conn.send.mockClear())
         const [
@@ -2076,7 +2031,7 @@ describe('when create devtools was called multiple times with `name` option unde
         ] = getUnnamedConnectionSubscribers(
           options1.testConnectionId,
           options2.testConnectionId,
-          options3.testConnectionId
+          options3.testConnectionId,
         )
 
         connectionSubscriber1({
@@ -2116,31 +2071,30 @@ describe('when create devtools was called multiple times with `name` option unde
         const [connection1, connection2, connection3] = connections
         expect(connection1.send).toHaveBeenLastCalledWith(
           null,
-          nextLiftedState1
+          nextLiftedState1,
         )
         expect(connection2.send).toHaveBeenLastCalledWith(
           null,
-          nextLiftedState2
+          nextLiftedState2,
         )
         expect(connection3.send).toHaveBeenLastCalledWith(
           null,
-          nextLiftedState3
+          nextLiftedState3,
         )
       })
 
       it('PAUSE_RECORDING, it toggles the sending of actions, connections are isolated from each other', async () => {
-        const { devtools, createStore } = await getImports()
         const options1 = { testConnectionId: 'asdf' }
         const options2 = { testConnectionId: '2f' }
         const options3 = { testConnectionId: 'd2e' }
         const api1 = createStore(
-          devtools(() => ({ count: 0 }), { enabled: true, ...options1 })
+          devtools(() => ({ count: 0 }), { enabled: true, ...options1 }),
         )
         const api2 = createStore(
-          devtools(() => ({ count: 2 }), { enabled: true, ...options2 })
+          devtools(() => ({ count: 2 }), { enabled: true, ...options2 }),
         )
         const api3 = createStore(
-          devtools(() => ({ count: 4 }), { enabled: true, ...options3 })
+          devtools(() => ({ count: 4 }), { enabled: true, ...options3 }),
         )
 
         const newState1 = { count: 1 }
@@ -2154,7 +2108,7 @@ describe('when create devtools was called multiple times with `name` option unde
           getUnnamedConnectionApis(
             options1.testConnectionId,
             options2.testConnectionId,
-            options3.testConnectionId
+            options3.testConnectionId,
           )
         const [
           connectionSubscriber1,
@@ -2163,12 +2117,12 @@ describe('when create devtools was called multiple times with `name` option unde
         ] = getUnnamedConnectionSubscribers(
           options1.testConnectionId,
           options2.testConnectionId,
-          options3.testConnectionId
+          options3.testConnectionId,
         )
 
         expect(connection1.send).toHaveBeenLastCalledWith(
           { type: 'increment' },
-          newState1
+          newState1,
         )
         connectionSubscriber1({
           type: 'DISPATCH',
@@ -2177,7 +2131,7 @@ describe('when create devtools was called multiple times with `name` option unde
         api1.setState({ count: 2 }, false, 'increment')
         expect(connection1.send).toHaveBeenLastCalledWith(
           { type: 'increment' },
-          newState1
+          newState1,
         )
         connectionSubscriber1({
           type: 'DISPATCH',
@@ -2186,12 +2140,12 @@ describe('when create devtools was called multiple times with `name` option unde
         api1.setState({ count: 3 }, false, 'increment')
         expect(connection1.send).toHaveBeenLastCalledWith(
           { type: 'increment' },
-          { count: 3 }
+          { count: 3 },
         )
 
         expect(connection2.send).toHaveBeenLastCalledWith(
           { type: 'increment' },
-          newState2
+          newState2,
         )
         connectionSubscriber2({
           type: 'DISPATCH',
@@ -2200,7 +2154,7 @@ describe('when create devtools was called multiple times with `name` option unde
         api2.setState({ count: 2 }, false, 'increment')
         expect(connection2.send).toHaveBeenLastCalledWith(
           { type: 'increment' },
-          newState2
+          newState2,
         )
         connectionSubscriber2({
           type: 'DISPATCH',
@@ -2209,12 +2163,12 @@ describe('when create devtools was called multiple times with `name` option unde
         api2.setState({ count: 3 }, false, 'increment')
         expect(connection2.send).toHaveBeenLastCalledWith(
           { type: 'increment' },
-          { count: 3 }
+          { count: 3 },
         )
 
         expect(connection3.send).toHaveBeenLastCalledWith(
           { type: 'increment' },
-          newState3
+          newState3,
         )
         connectionSubscriber3({
           type: 'DISPATCH',
@@ -2223,7 +2177,7 @@ describe('when create devtools was called multiple times with `name` option unde
         api3.setState({ count: 2 }, false, 'increment')
         expect(connection3.send).toHaveBeenLastCalledWith(
           { type: 'increment' },
-          newState3
+          newState3,
         )
         connectionSubscriber3({
           type: 'DISPATCH',
@@ -2232,7 +2186,7 @@ describe('when create devtools was called multiple times with `name` option unde
         api3.setState({ count: 3 }, false, 'increment')
         expect(connection3.send).toHaveBeenLastCalledWith(
           { type: 'increment' },
-          { count: 3 }
+          { count: 3 },
         )
       })
     })
@@ -2243,14 +2197,13 @@ describe('when create devtools was called multiple times with `name` and `store`
   describe('when `type` was provided in store state methods as option', () => {
     describe('When state changes...', () => {
       it("sends { type: setStateName || 'anonymous`, ...rest } as the action with current state", async () => {
-        const { devtools, createStore } = await getImports()
         const options = {
           name: 'testOptionsName',
           store: 'someStore',
           enabled: true,
         }
         const api = createStore(
-          devtools(() => ({ count: 0, foo: 'bar' }), options)
+          devtools(() => ({ count: 0, foo: 'bar' }), options),
         )
 
         const testStateActionType = 'testSetStateName'
@@ -2259,7 +2212,7 @@ describe('when create devtools was called multiple times with `name` and `store`
         const [connection] = getNamedConnectionApis(options.name)
         expect(connection.send).toHaveBeenLastCalledWith(
           { type: `${options.store}/${testStateActionType}` },
-          { [options.store]: { count: 10, foo: 'bar' } }
+          { [options.store]: { count: 10, foo: 'bar' } },
         )
 
         api.setState({ count: 15 }, false, {
@@ -2268,13 +2221,13 @@ describe('when create devtools was called multiple times with `name` and `store`
         })
         expect(connection.send).toHaveBeenLastCalledWith(
           { type: `${options.store}/${testStateActionType}`, payload: 15 },
-          { [options.store]: { count: 15, foo: 'bar' } }
+          { [options.store]: { count: 15, foo: 'bar' } },
         )
 
         api.setState({ count: 5, foo: 'baz' }, true)
         expect(connection.send).toHaveBeenLastCalledWith(
           { type: `${options.store}/anonymous` },
-          { [options.store]: { count: 5, foo: 'baz' } }
+          { [options.store]: { count: 5, foo: 'baz' } },
         )
       })
     })
@@ -2282,7 +2235,6 @@ describe('when create devtools was called multiple times with `name` and `store`
     describe('when it receives a message of type...', () => {
       describe('ACTION...', () => {
         it('does nothing, connections isolated from each other', async () => {
-          const { devtools, createStore } = await getImports()
           const options1 = { testConnectionId: '123', store: 'store1' }
           const options2 = { testConnectionId: '231', store: 'store2' }
           const initialState1 = { count: 0 }
@@ -2293,33 +2245,33 @@ describe('when create devtools was called multiple times with `name` and `store`
             devtools(() => initialState1, {
               enabled: true,
               ...options1,
-            })
+            }),
           )
           const api2 = createStore(
             devtools(() => initialState2, {
               enabled: true,
               ...options1,
-            })
+            }),
           )
           const api3 = createStore(
             devtools(() => initialState3, {
               enabled: true,
               ...options2,
-            })
+            }),
           )
           const api4 = createStore(
             devtools(() => initialState4, {
               enabled: true,
               ...options2,
-            })
+            }),
           )
-          const setState1 = jest.spyOn(api1, 'setState')
-          const setState2 = jest.spyOn(api2, 'setState')
-          const setState3 = jest.spyOn(api3, 'setState')
-          const setState4 = jest.spyOn(api4, 'setState')
+          const setState1 = vi.spyOn(api1, 'setState')
+          const setState2 = vi.spyOn(api2, 'setState')
+          const setState3 = vi.spyOn(api3, 'setState')
+          const setState4 = vi.spyOn(api4, 'setState')
 
           const [subscriber] = getUnnamedConnectionSubscribers(
-            options1.testConnectionId
+            options1.testConnectionId,
           )
           subscriber({
             type: 'ACTION',
@@ -2337,7 +2289,6 @@ describe('when create devtools was called multiple times with `name` and `store`
         })
 
         it('unless action type is __setState, connections isolated from each other', async () => {
-          const { devtools, createStore } = await getImports()
           const name1 = 'name1'
           const name2 = 'name2'
           const store1 = 'someStore1'
@@ -2355,16 +2306,16 @@ describe('when create devtools was called multiple times with `name` and `store`
           const initialState1 = { count: 0 }
           const initialState2 = { count: 2 }
           const api1 = createStore(
-            devtools(() => initialState1, { enabled: true, ...options1 })
+            devtools(() => initialState1, { enabled: true, ...options1 }),
           )
           const api2 = createStore(
-            devtools(() => initialState2, { enabled: true, ...options2 })
+            devtools(() => initialState2, { enabled: true, ...options2 }),
           )
           const originalConsoleError = console.error
-          console.error = jest.fn()
+          console.error = vi.fn()
 
           const [connectionSubscriber] = getNamedConnectionSubscribers(
-            getKeyFromOptions(options1)
+            getKeyFromOptions(options1),
           )
           connectionSubscriber({
             type: 'ACTION',
@@ -2374,8 +2325,8 @@ describe('when create devtools was called multiple times with `name` and `store`
 
           expect(console.error).toHaveBeenCalledWith(
             expect.stringContaining(
-              '[zustand devtools middleware] Unsupported __setState'
-            )
+              '[zustand devtools middleware] Unsupported __setState',
+            ),
           )
           connectionSubscriber({
             type: 'ACTION',
@@ -2394,7 +2345,8 @@ describe('when create devtools was called multiple times with `name` and `store`
         })
 
         it('does nothing even if there is `api.dispatch`, connections isolated from each other', async () => {
-          const { devtools, createStore } = await getImports()
+          const { devtools: newDevtools } = await import('zustand/middleware')
+
           const name1 = 'name1'
           const name2 = 'name2'
           const store1 = 'someStore1'
@@ -2412,19 +2364,19 @@ describe('when create devtools was called multiple times with `name` and `store`
           const initialState1 = { count: 0 }
           const initialState2 = { count: 2 }
           const api1 = createStore(
-            devtools(() => initialState1, { enabled: true, ...options1 })
+            newDevtools(() => initialState1, { enabled: true, ...options1 }),
           )
           const api2 = createStore(
-            devtools(() => initialState2, { enabled: true, ...options2 })
+            newDevtools(() => initialState2, { enabled: true, ...options2 }),
           )
-          ;(api1 as any).dispatch = jest.fn()
-          ;(api2 as any).dispatch = jest.fn()
-          const setState1 = jest.spyOn(api1, 'setState')
-          const setState2 = jest.spyOn(api2, 'setState')
+          ;(api1 as any).dispatch = vi.fn()
+          ;(api2 as any).dispatch = vi.fn()
+          const setState1 = vi.spyOn(api1, 'setState')
+          const setState2 = vi.spyOn(api2, 'setState')
 
           const subscribers = getNamedConnectionSubscribers(
             getKeyFromOptions(options1),
-            getKeyFromOptions(options2)
+            getKeyFromOptions(options2),
           )
           const testPayload = {
             type: 'ACTION',
@@ -2441,7 +2393,7 @@ describe('when create devtools was called multiple times with `name` and `store`
         })
 
         it('dispatches with `api.dispatch` when `api.dispatchFromDevtools` is set to true, connections are isolated from each other', async () => {
-          const { devtools, createStore } = await getImports()
+          const { devtools: newDevtools } = await import('zustand/middleware')
           const name1 = 'name1'
           const name2 = 'name2'
           const store1 = 'someStore1'
@@ -2459,21 +2411,21 @@ describe('when create devtools was called multiple times with `name` and `store`
           const initialState1 = { count: 0 }
           const initialState2 = { count: 2 }
           const api1 = createStore(
-            devtools(() => initialState1, { enabled: true, ...options1 })
+            newDevtools(() => initialState1, { enabled: true, ...options1 }),
           )
           const api2 = createStore(
-            devtools(() => initialState2, { enabled: true, ...options2 })
+            newDevtools(() => initialState2, { enabled: true, ...options2 }),
           )
-          ;(api1 as any).dispatch = jest.fn()
+          ;(api1 as any).dispatch = vi.fn()
           ;(api1 as any).dispatchFromDevtools = true
-          ;(api2 as any).dispatch = jest.fn()
+          ;(api2 as any).dispatch = vi.fn()
           ;(api2 as any).dispatchFromDevtools = true
-          const setState1 = jest.spyOn(api1, 'setState')
-          const setState2 = jest.spyOn(api2, 'setState')
+          const setState1 = vi.spyOn(api1, 'setState')
+          const setState2 = vi.spyOn(api2, 'setState')
 
           const subscribers = getNamedConnectionSubscribers(
             getKeyFromOptions(options1),
-            getKeyFromOptions(options2)
+            getKeyFromOptions(options2),
           )
           const getTestPayload = (n: number) => ({
             type: 'ACTION',

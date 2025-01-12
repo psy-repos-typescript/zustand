@@ -1,6 +1,6 @@
 ---
 title: Initialize state with props
-nav: 14
+nav: 13
 ---
 
 In cases where [dependency injection](https://en.wikipedia.org/wiki/Dependency_injection) is needed, such as when a store should be initialized with props from a component, the recommended approach is to use a vanilla store with React.context.
@@ -105,13 +105,10 @@ function BearProvider({ children, ...props }: BearProviderProps) {
 import { useContext } from 'react'
 import { useStore } from 'zustand'
 
-function useBearContext<T>(
-  selector: (state: BearState) => T,
-  equalityFn?: (left: T, right: T) => boolean
-): T {
+function useBearContext<T>(selector: (state: BearState) => T): T {
   const store = useContext(BearContext)
   if (!store) throw new Error('Missing BearContext.Provider in the tree')
-  return useStore(store, selector, equalityFn)
+  return useStore(store, selector)
 }
 ```
 
@@ -126,6 +123,23 @@ function CommonConsumer() {
       <button onClick={addBear}>Add bear</button>
     </>
   )
+}
+```
+
+### Optionally allow using a custom equality function
+
+```tsx
+// Allow custom equality function by using useStoreWithEqualityFn instead of useStore
+import { useContext } from 'react'
+import { useStoreWithEqualityFn } from 'zustand/traditional'
+
+function useBearContext<T>(
+  selector: (state: BearState) => T,
+  equalityFn?: (left: T, right: T) => boolean,
+): T {
+  const store = useContext(BearContext)
+  if (!store) throw new Error('Missing BearContext.Provider in the tree')
+  return useStoreWithEqualityFn(store, selector, equalityFn)
 }
 ```
 

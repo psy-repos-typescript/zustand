@@ -14,12 +14,14 @@ and we will compare key differences and similarities between each.
 
 ## Redux
 
-### State Model
+### State Model (vs Redux)
 
 Conceptually, Zustand and Redux are quite similar,
 both are based on an immutable state model.
 However, Redux requires your app to be wrapped
 in context providers; Zustand does not.
+
+**Zustand**
 
 ```ts
 import { create } from 'zustand'
@@ -74,6 +76,8 @@ const useCountStore = create<State & Actions>((set) => ({
 }))
 ```
 
+**Redux**
+
 ```ts
 import { createStore } from 'redux'
 import { useSelector, useDispatch } from 'react-redux'
@@ -122,7 +126,7 @@ const countSlice = createSlice({
 const countStore = configureStore({ reducer: countSlice.reducer })
 ```
 
-### Render Optimization
+### Render Optimization (vs Redux)
 
 When it comes to render optimizations within your app,
 there are no major differences in approach between Zustand and Redux.
@@ -228,7 +232,7 @@ const Component = () => {
 
 ## Valtio
 
-### State Model
+### State Model (vs Valtio)
 
 Zustand and Valtio approach state management
 in a fundamentally different way.
@@ -259,7 +263,7 @@ const state = proxy({ obj: { count: 0 } })
 state.obj.count += 1
 ```
 
-### Render Optimization
+### Render Optimization (vs Valtio)
 
 The other difference between Zustand and Valtio
 is Valtio makes render optimizations through property access.
@@ -302,14 +306,11 @@ const Component = () => {
 
 ## Jotai
 
-### State Model
+### State Model (vs Jotai)
 
-There are two major differences between Zustand and Jotai.
-Firstly, Zustand is a single store,
-while Jotai consists of primitive atoms
-that can be composed together.
-Secondly, a Zustand store is an external store,
-making it more suitable when access outside of React is required.
+There is one major difference between Zustand and Jotai.
+Zustand is a single store,
+while Jotai consists of primitive atoms that can be composed together.
 
 **Zustand**
 
@@ -322,7 +323,7 @@ type State = {
 
 type Actions = {
   updateCount: (
-    countCallback: (count: State['count']) => State['count']
+    countCallback: (count: State['count']) => State['count'],
   ) => void
 }
 
@@ -341,7 +342,7 @@ import { atom } from 'jotai'
 const countAtom = atom<number>(0)
 ```
 
-### Render Optimization
+### Render Optimization (vs Jotai)
 
 Jotai achieves render optimizations through atom dependency.
 However, with Zustand it is recommended that
@@ -358,7 +359,7 @@ type State = {
 
 type Actions = {
   updateCount: (
-    countCallback: (count: State['count']) => State['count']
+    countCallback: (count: State['count']) => State['count'],
   ) => void
 }
 
@@ -390,7 +391,7 @@ const Component = () => {
 
 ## Recoil
 
-### State Model
+### State Model (vs Recoil)
 
 The difference between Zustand and Recoil
 is similar to that between Zustand and Jotai.
@@ -429,7 +430,7 @@ const count = atom({
 })
 ```
 
-### Render Optimization
+### Render Optimization (vs Recoil)
 
 Similar to previous optimization comparisons,
 Recoil makes render optimizations through atom dependency.
@@ -477,3 +478,7 @@ const Component = () => {
   // ...
 }
 ```
+
+## Npm Downloads Trend
+
+- [Npm Downloads Trend of State Management Libraries for React](https://npm-stat.com/charts.html?package=zustand&package=jotai&package=valtio&package=%40reduxjs%2Ftoolkit&package=recoil)
