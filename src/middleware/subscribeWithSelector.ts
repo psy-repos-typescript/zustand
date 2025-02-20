@@ -1,15 +1,15 @@
-import type { StateCreator, StoreMutatorIdentifier } from '../vanilla'
+import type { StateCreator, StoreMutatorIdentifier } from '../vanilla.ts'
 
 type SubscribeWithSelector = <
   T,
   Mps extends [StoreMutatorIdentifier, unknown][] = [],
-  Mcs extends [StoreMutatorIdentifier, unknown][] = []
+  Mcs extends [StoreMutatorIdentifier, unknown][] = [],
 >(
   initializer: StateCreator<
     T,
     [...Mps, ['zustand/subscribeWithSelector', never]],
     Mcs
-  >
+  >,
 ) => StateCreator<T, Mps, [['zustand/subscribeWithSelector', never], ...Mcs]>
 
 type Write<T, U> = Omit<T, keyof U> & U
@@ -34,13 +34,13 @@ type StoreSubscribeWithSelector<T> = {
       options?: {
         equalityFn?: (a: U, b: U) => boolean
         fireImmediately?: boolean
-      }
+      },
     ): () => void
   }
 }
 
 type SubscribeWithSelectorImpl = <T extends object>(
-  storeInitializer: StateCreator<T, [], []>
+  storeInitializer: StateCreator<T, [], []>,
 ) => StateCreator<T, [], []>
 
 const subscribeWithSelectorImpl: SubscribeWithSelectorImpl =

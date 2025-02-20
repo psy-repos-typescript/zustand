@@ -1,4 +1,4 @@
-import { expect, it } from '@jest/globals'
+import { expect, it } from 'vitest'
 import { create } from 'zustand'
 import type {
   StateCreator,
@@ -30,7 +30,7 @@ it('can use exposed types', () => {
     numGet: () => 2,
   }
   const partialFn: (state: ExampleState) => Partial<ExampleState> = (
-    state
+    state,
   ) => ({
     ...state,
     num: 2,
@@ -79,10 +79,9 @@ it('can use exposed types', () => {
     _stateSelector: (state: ExampleState) => number,
     _storeApi: StoreApi<ExampleState>,
     _subscribe: StoreApi<ExampleState>['subscribe'],
-    _destroy: StoreApi<ExampleState>['destroy'],
     _equalityFn: (a: ExampleState, b: ExampleState) => boolean,
     _stateCreator: StateCreator<ExampleState>,
-    _useBoundStore: UseBoundStore<StoreApi<ExampleState>>
+    _useBoundStore: UseBoundStore<StoreApi<ExampleState>>,
   ) {
     expect(true).toBeTruthy()
   }
@@ -96,10 +95,9 @@ it('can use exposed types', () => {
     selector,
     storeApi,
     storeApi.subscribe,
-    storeApi.destroy,
     equalityFn,
     stateCreator,
-    useBoundStore
+    useBoundStore,
   )
 })
 
@@ -114,9 +112,9 @@ it('should have correct (partial) types for setState', () => {
 
   const store = create<Count>((set) => ({
     count: 0,
-    // @ts-expect-error we shouldn't be able to set count to undefined [LATEST-TS-ONLY]
+    // @ts-expect-error we shouldn't be able to set count to undefined
     a: () => set(() => ({ count: undefined })),
-    // @ts-expect-error we shouldn't be able to set count to undefined [LATEST-TS-ONLY]
+    // @ts-expect-error we shouldn't be able to set count to undefined
     b: () => set({ count: undefined }),
     c: () => set({ count: 1 }),
   }))
@@ -132,9 +130,9 @@ it('should have correct (partial) types for setState', () => {
   store.setState({})
   store.setState((previous) => previous)
 
-  // @ts-expect-error type undefined is not assignable to type number [LATEST-TS-ONLY]
+  // @ts-expect-error type undefined is not assignable to type number
   store.setState({ count: undefined })
-  // @ts-expect-error type undefined is not assignable to type number [LATEST-TS-ONLY]
+  // @ts-expect-error type undefined is not assignable to type number
   store.setState((state) => ({ ...state, count: undefined }))
 })
 
@@ -233,4 +231,18 @@ it('StateCreator subtyping', () => {
 
   const _testSubtyping: StateCreator<State, [['zustand/persist', unknown]]> =
     {} as StateCreator<State, []>
+})
+
+it('set state exists on store with readonly store', () => {
+  interface State {
+    count: number
+    increment: () => void
+  }
+
+  const useStore = create<State>()((set, get) => ({
+    count: 0,
+    increment: () => set({ count: get().count + 1 }),
+  }))
+
+  useStore.setState((state) => ({ ...state, count: state.count + 1 }))
 })

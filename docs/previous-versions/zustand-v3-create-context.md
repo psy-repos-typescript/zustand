@@ -1,6 +1,6 @@
 ---
 title: createContext from zustand/context
-nav: 18
+nav: 21
 ---
 
 A special `createContext` is provided since v3.5,
@@ -96,7 +96,8 @@ export default function App({ initialBears }) {
           bears: initialBears,
           increase: () => set((state) => ({ bears: state.bears + 1 })),
         }))
-      }>
+      }
+    >
       <Button />
     </Provider>
   )
@@ -107,25 +108,38 @@ export default function App({ initialBears }) {
 
 Discussion: https://github.com/pmndrs/zustand/discussions/1276
 
-Here's the diff showing how to migrate from v3 createContext to v4 API.
+Here's the new context usage with v4 API.
 
-```diff
-// store.ts
-+ import { createContext, useContext } from "react";
-- import create from "zustand";
-- import createContext from "zustand/context";
-+ import { createStore, useStore } from "zustand";
+```jsx
+import { createContext, useContext, useRef } from 'react'
+import { createStore, useStore } from 'zustand'
 
-- const useStore = create((set) => ({
-+ const store =  createStore((set) => ({
-    bears: 0,
-    increasePopulation: () => set((state) => ({ bears: state.bears + 1 })),
-    removeAllBears: () => set({ bears: 0 })
-  }));
+const StoreContext = createContext(null)
 
-+ const MyContext = createContext()
+const StoreProvider = ({ children }) => {
+  const storeRef = useRef()
+  if (!storeRef.current) {
+    storeRef.current = createStore((set) => ({
+      // ...
+    }))
+  }
+  return (
+    <StoreContext.Provider value={storeRef.current}>
+      {children}
+    </StoreContext.Provider>
+  )
+}
 
-+ export const Provider = ({ children }) = <MyContext.Provider value={store}>{children}</MyContext.Provider>;
-
-+ export const useMyStore = (selector) => useStore(useContext(MyContext), selector);
+const useStoreInContext = (selector) => {
+  const store = useContext(StoreContext)
+  if (!store) {
+    throw new Error('Missing StoreProvider')
+  }
+  return useStore(store, selector)
+}
 ```
+
+Or reach out to some third-party libraries that provide Zustand v3-like APIs:
+
+- <https://github.com/charkour/zustand-di>
+- <https://github.com/arvinxx/zustand-utils>

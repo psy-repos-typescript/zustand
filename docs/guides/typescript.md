@@ -1,11 +1,11 @@
 ---
 title: TypeScript Guide
-nav: 8
+nav: 7
 ---
 
 ## Basic usage
 
-The difference when using TypeScript is that instead of writing `create(...)`, you have to write `create<T>()(...)` (notice the extra parenthesis `()` too along with the type parameter) where `T` is the type of the state to annotate it. For example:
+The difference when using TypeScript is that instead of writing `create(...)`, you have to write `create<T>()(...)` (notice the extra parentheses `()` too along with the type parameter) where `T` is the type of the state to annotate it. For example:
 
 ```ts
 import { create } from 'zustand'
@@ -80,16 +80,16 @@ const useBoundStore = create<{ foo: number }>()((_, get) => ({
 
 This code compiles. But if we run it, we'll get an exception: "Uncaught TypeError: Cannot read properties of undefined (reading 'foo')". This is because `get` would return `undefined` before the initial state is created (hence you shouldn't call `get` when creating the initial state). The types promise that `get` will never return `undefined` but it does initially, which means Zustand failed to implement it.
 
-And of course Zustand failed because it's impossible to implement `create` the way types promise (in the same way it's impossible to implement `createFoo`). In other words we don't have a type to express the actual `create` we have implemented. We can't type `get` as `() => T | undefined` because it would cause inconveince and it still won't be correct as `get` is indeed `() => T` eventually, just if called synchronously it would be `() => undefined`. What we need is some kind of TypeScript feature that allows us to type `get` as `(() => T) & WhenSync<() => undefined>`, which of course is extremly far-fetched.
+And of course Zustand failed because it's impossible to implement `create` the way types promise (in the same way it's impossible to implement `createFoo`). In other words we don't have a type to express the actual `create` we have implemented. We can't type `get` as `() => T | undefined` because it would cause inconvenience and it still won't be correct as `get` is indeed `() => T` eventually, just if called synchronously it would be `() => undefined`. What we need is some kind of TypeScript feature that allows us to type `get` as `(() => T) & WhenSync<() => undefined>`, which of course is extremely far-fetched.
 
-So we have two problems: lack of inference and unsoundness. Lack of inference can be solved if TypeScript can improves its inference for invariants. And unsoundness can be solved if TypeScript introduces something like `WhenSync`. To work around lack of inference we manually annotate the state type. And we can't work around unsoundness, but it's not a big deal because it's not much, calling `get` synchronously anyway doesn't make sense.
+So we have two problems: lack of inference and unsoundness. Lack of inference can be solved if TypeScript can improve its inference for invariants. And unsoundness can be solved if TypeScript introduces something like `WhenSync`. To work around lack of inference we manually annotate the state type. And we can't work around unsoundness, but it's not a big deal because it's not much, calling `get` synchronously anyway doesn't make sense.
 
 </details>
 
 </details>
 
 <details>
-  <summary>Why that currying `()(...)`?</summary>
+  <summary>Why the currying `()(...)`?</summary>
 
   <br/>
 
@@ -99,7 +99,7 @@ Imagine you have a scenario like this:
 
 ```ts
 declare const withError: <T, E>(
-  p: Promise<T>
+  p: Promise<T>,
 ) => Promise<[error: undefined, value: T] | [error: E, value: undefined]>
 declare const doSomething: () => Promise<string>
 
@@ -113,11 +113,11 @@ Here, `T` is inferred to be a `string` and `E` is inferred to be `unknown`. You 
 ```ts
 declare const withError: {
   <E>(): <T>(
-    p: Promise<T>
+    p: Promise<T>,
   ) => Promise<[error: undefined, value: T] | [error: E, value: undefined]>
-  <T, E>(p: Promise<T>): Promise<
-    [error: undefined, value: T] | [error: E, value: undefined]
-  >
+  <T, E>(
+    p: Promise<T>,
+  ): Promise<[error: undefined, value: T] | [error: E, value: undefined]>
 }
 declare const doSomething: () => Promise<string>
 interface Foo {
@@ -142,7 +142,7 @@ import { combine } from 'zustand/middleware'
 const useBearStore = create(
   combine({ bears: 0 }, (set) => ({
     increase: (by: number) => set((state) => ({ bears: state.bears + by })),
-  }))
+  })),
 )
 ```
 
@@ -161,6 +161,21 @@ It isn't really a lie because `{ bears: number }` is still a subtype of `{ bears
 
 Note that we don't use the curried version when using `combine` because `combine` "creates" the state. When using a middleware that creates the state, it isn't necessary to use the curried version because the state now can be inferred. Another middleware that creates state is `redux`. So when using `combine`, `redux`, or any other custom middleware that creates the state, we don't recommend using the curried version.
 
+If you want to infer state type also outside of state declaration, you can use the `ExtractState` type helper:
+
+```ts
+import { create, ExtractState } from 'zustand'
+import { combine } from 'zustand/middleware'
+
+type BearState = ExtractState<typeof useBearStore>
+
+const useBearStore = create(
+  combine({ bears: 0 }, (set) => ({
+    increase: (by: number) => set((state) => ({ bears: state.bears + by })),
+  })),
+)
+```
+
 ## Using middlewares
 
 You do not have to do anything special to use middlewares in TypeScript.
@@ -176,11 +191,14 @@ interface BearState {
 
 const useBearStore = create<BearState>()(
   devtools(
-    persist((set) => ({
-      bears: 0,
-      increase: (by) => set((state) => ({ bears: state.bears + by })),
-    }))
-  )
+    persist(
+      (set) => ({
+        bears: 0,
+        increase: (by) => set((state) => ({ bears: state.bears + by })),
+      }),
+      { name: 'bearStore' },
+    ),
+  ),
 )
 ```
 
@@ -190,7 +208,7 @@ Just make sure you are using them immediately inside `create` so as to make the 
 import { create } from 'zustand'
 import { devtools, persist } from 'zustand/middleware'
 
-const myMiddlewares = (f) => devtools(persist(f))
+const myMiddlewares = (f) => devtools(persist(f, { name: 'bearStore' }))
 
 interface BearState {
   bears: number
@@ -201,11 +219,11 @@ const useBearStore = create<BearState>()(
   myMiddlewares((set) => ({
     bears: 0,
     increase: (by) => set((state) => ({ bears: state.bears + by })),
-  }))
+  })),
 )
 ```
 
-Also, we recommend using `devtools` middleware as last as possible. For example, when you use it with `immer` as a middleware, it should be `immer(devtools(...))` and not `devtools(immer(...))`. This is because`devtools` mutates the `setState` and adds a type parameter on it, which could get lost if other middlewares (like `immer`) also mutate `setState` before `devtools`. Hence using `devtools` at the end makes sure that no middlewares mutate `setState` before it.
+Also, we recommend using `devtools` middleware as last as possible. For example, when you use it with `immer` as a middleware, it should be `devtools(immer(...))` and not `immer(devtools(...))`. This is because`devtools` mutates the `setState` and adds a type parameter on it, which could get lost if other middlewares (like `immer`) also mutate `setState` before `devtools`. Hence using `devtools` at the end makes sure that no middlewares mutate `setState` before it.
 
 ## Authoring middlewares and advanced usage
 
@@ -223,40 +241,79 @@ const useBearStore = create(foo(() => ({ bears: 0 }), 'hello'))
 console.log(useBearStore.foo.toUpperCase())
 ```
 
-Zustand middlewares can mutate the store. But how could we possibly encode the mutation on the type-level? That is to say how could do we type `foo` so that this code compiles?
+Zustand middlewares can mutate the store. But how could we possibly encode the mutation on the type-level? That is to say how could we type `foo` so that this code compiles?
 
 For a usual statically typed language, this is impossible. But thanks to TypeScript, Zustand has something called a "higher-kinded mutator" that makes this possible. If you are dealing with complex type problems, like typing a middleware or using the `StateCreator` type, you will have to understand this implementation detail. For this, you can [check out #710](https://github.com/pmndrs/zustand/issues/710).
 
 If you are eager to know what the answer is to this particular problem then you can [see it here](#middleware-that-changes-the-store-type).
+
+### Handling Dynamic `replace` Flag
+
+If the value of the `replace` flag is not known at compile time and is determined dynamically, you might face issues. To handle this, you can use a workaround by annotating the `replace` parameter with the parameters of the `setState` function:
+
+```ts
+const replaceFlag = Math.random() > 0.5
+const args = [{ bears: 5 }, replaceFlag] as Parameters<
+  typeof useBearStore.setState
+>
+store.setState(...args)
+```
+
+#### Example with `as Parameters` Workaround
+
+```ts
+import { create } from 'zustand'
+
+interface BearState {
+  bears: number
+  increase: (by: number) => void
+}
+
+const useBearStore = create<BearState>()((set) => ({
+  bears: 0,
+  increase: (by) => set((state) => ({ bears: state.bears + by })),
+}))
+
+const replaceFlag = Math.random() > 0.5
+const args = [{ bears: 5 }, replaceFlag] as Parameters<
+  typeof useBearStore.setState
+>
+useBearStore.setState(...args) // Using the workaround
+```
+
+By following this approach, you can ensure that your code handles dynamic `replace` flags without encountering type issues.
 
 ## Common recipes
 
 ### Middleware that doesn't change the store type
 
 ```ts
-import { create, State, StateCreator, StoreMutatorIdentifier } from 'zustand'
+import { create, StateCreator, StoreMutatorIdentifier } from 'zustand'
 
 type Logger = <
-  T extends State,
+  T,
   Mps extends [StoreMutatorIdentifier, unknown][] = [],
-  Mcs extends [StoreMutatorIdentifier, unknown][] = []
+  Mcs extends [StoreMutatorIdentifier, unknown][] = [],
 >(
   f: StateCreator<T, Mps, Mcs>,
-  name?: string
+  name?: string,
 ) => StateCreator<T, Mps, Mcs>
 
-type LoggerImpl = <T extends State>(
+type LoggerImpl = <T>(
   f: StateCreator<T, [], []>,
-  name?: string
+  name?: string,
 ) => StateCreator<T, [], []>
 
 const loggerImpl: LoggerImpl = (f, name) => (set, get, store) => {
-  type T = ReturnType<typeof f>
   const loggedSet: typeof set = (...a) => {
-    set(...a)
+    set(...(a as Parameters<typeof set>))
     console.log(...(name ? [`${name}:`] : []), get())
   }
-  store.setState = loggedSet
+  const setState = store.setState
+  store.setState = (...a) => {
+    setState(...(a as Parameters<typeof setState>))
+    console.log(...(name ? [`${name}:`] : []), store.getState())
+  }
 
   return f(loggedSet, get, store)
 }
@@ -271,8 +328,8 @@ const useBearStore = create<BearState>()(
       bears: 0,
       increase: (by) => set((state) => ({ bears: state.bears + by })),
     }),
-    'bear-store'
-  )
+    'bear-store',
+  ),
 )
 ```
 
@@ -281,7 +338,6 @@ const useBearStore = create<BearState>()(
 ```ts
 import {
   create,
-  State,
   StateCreator,
   StoreMutatorIdentifier,
   Mutate,
@@ -289,13 +345,13 @@ import {
 } from 'zustand'
 
 type Foo = <
-  T extends State,
+  T,
   A,
   Mps extends [StoreMutatorIdentifier, unknown][] = [],
-  Mcs extends [StoreMutatorIdentifier, unknown][] = []
+  Mcs extends [StoreMutatorIdentifier, unknown][] = [],
 >(
   f: StateCreator<T, [...Mps, ['foo', A]], Mcs>,
-  bar: A
+  bar: A,
 ) => StateCreator<T, Mps, [['foo', A], ...Mcs]>
 
 declare module 'zustand' {
@@ -304,9 +360,9 @@ declare module 'zustand' {
   }
 }
 
-type FooImpl = <T extends State, A>(
+type FooImpl = <T, A>(
   f: StateCreator<T, [], []>,
-  bar: A
+  bar: A,
 ) => StateCreator<T, [], []>
 
 const fooImpl: FooImpl = (f, bar) => (set, get, _store) => {
@@ -351,7 +407,7 @@ const useBearStore = create<
 >(devtools(persist((set) => ({
   bears: 0,
   increase: (by) => set((state) => ({ bears: state.bears + by })),
-})))
+}), { name: 'bearStore' }))
 ```
 
 ### Slices pattern
@@ -364,6 +420,17 @@ interface BearSlice {
   addBear: () => void
   eatFish: () => void
 }
+
+interface FishSlice {
+  fishes: number
+  addFish: () => void
+}
+
+interface SharedSlice {
+  addBoth: () => void
+  getBoth: () => void
+}
+
 const createBearSlice: StateCreator<
   BearSlice & FishSlice,
   [],
@@ -375,10 +442,6 @@ const createBearSlice: StateCreator<
   eatFish: () => set((state) => ({ fishes: state.fishes - 1 })),
 })
 
-interface FishSlice {
-  fishes: number
-  addFish: () => void
-}
 const createFishSlice: StateCreator<
   BearSlice & FishSlice,
   [],
@@ -389,9 +452,26 @@ const createFishSlice: StateCreator<
   addFish: () => set((state) => ({ fishes: state.fishes + 1 })),
 })
 
-const useBoundStore = create<BearSlice & FishSlice>()((...a) => ({
+const createSharedSlice: StateCreator<
+  BearSlice & FishSlice,
+  [],
+  [],
+  SharedSlice
+> = (set, get) => ({
+  addBoth: () => {
+    // you can reuse previous methods
+    get().addBear()
+    get().addFish()
+    // or do them from scratch
+    // set((state) => ({ bears: state.bears + 1, fishes: state.fishes + 1 })
+  },
+  getBoth: () => get().bears + get().fishes,
+})
+
+const useBoundStore = create<BearSlice & FishSlice & SharedSlice>()((...a) => ({
   ...createBearSlice(...a),
   ...createFishSlice(...a),
+  ...createSharedSlice(...a),
 }))
 ```
 
@@ -416,19 +496,13 @@ const bearStore = createStore<BearState>()((set) => ({
 }))
 
 function useBearStore(): BearState
-function useBearStore<T>(
-  selector: (state: BearState) => T,
-  equals?: (a: T, b: T) => boolean
-): T
-function useBearStore<T>(
-  selector?: (state: BearState) => T,
-  equals?: (a: T, b: T) => boolean
-) {
-  return useStore(bearStore, selector!, equals)
+function useBearStore<T>(selector: (state: BearState) => T): T
+function useBearStore<T>(selector?: (state: BearState) => T) {
+  return useStore(bearStore, selector!)
 }
 ```
 
-You can also make an abstract `createBoundedUseStore` if you create bounded `useStore`s often and want to DRY things up...
+You can also make an abstract `createBoundedUseStore` function if you need to create bounded `useStore` hooks often and want to DRY things up...
 
 ```ts
 import { useStore, StoreApi } from 'zustand'
@@ -444,18 +518,15 @@ const bearStore = createStore<BearState>()((set) => ({
   increase: (by) => set((state) => ({ bears: state.bears + by })),
 }))
 
-const createBoundedUseStore = ((store) => (selector, equals) =>
-  useStore(store, selector as any, equals)) as <S extends StoreApi<unknown>>(
-  store: S
+const createBoundedUseStore = ((store) => (selector) =>
+  useStore(store, selector)) as <S extends StoreApi<unknown>>(
+  store: S,
 ) => {
   (): ExtractState<S>
-  <T>(
-    selector?: (state: ExtractState<S>) => T,
-    equals?: (a: T, b: T) => boolean
-  ): T
+  <T>(selector: (state: ExtractState<S>) => T): T
 }
 
-type ExtractState<S> = S extends { get: () => infer X } ? X : never
+type ExtractState<S> = S extends { getState: () => infer X } ? X : never
 
 const useBearStore = createBoundedUseStore(bearStore)
 ```

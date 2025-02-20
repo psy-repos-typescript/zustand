@@ -1,9 +1,9 @@
-import type { StateCreator, StoreMutatorIdentifier } from '../vanilla'
-import type { NamedSet } from './devtools'
+import type { StateCreator, StoreMutatorIdentifier } from '../vanilla.ts'
+import type { NamedSet } from './devtools.ts'
 
 type Write<T, U> = Omit<T, keyof U> & U
 
-type Action = { type: unknown }
+type Action = { type: string }
 
 type StoreRedux<A> = {
   dispatch: (a: A) => A
@@ -19,10 +19,10 @@ type WithRedux<S, A> = Write<S, StoreRedux<A>>
 type Redux = <
   T,
   A extends Action,
-  Cms extends [StoreMutatorIdentifier, unknown][] = []
+  Cms extends [StoreMutatorIdentifier, unknown][] = [],
 >(
   reducer: (state: T, action: A) => T,
-  initialState: T
+  initialState: T,
 ) => StateCreator<Write<T, ReduxState<A>>, Cms, [['zustand/redux', A]]>
 
 declare module '../vanilla' {
@@ -33,7 +33,7 @@ declare module '../vanilla' {
 
 type ReduxImpl = <T, A extends Action>(
   reducer: (state: T, action: A) => T,
-  initialState: T
+  initialState: T,
 ) => StateCreator<T & ReduxState<A>, [], []>
 
 const reduxImpl: ReduxImpl = (reducer, initial) => (set, _get, api) => {

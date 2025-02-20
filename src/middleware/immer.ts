@@ -1,13 +1,13 @@
 import { produce } from 'immer'
 import type { Draft } from 'immer'
-import type { StateCreator, StoreMutatorIdentifier } from '../vanilla'
+import type { StateCreator, StoreMutatorIdentifier } from '../vanilla.ts'
 
 type Immer = <
   T,
   Mps extends [StoreMutatorIdentifier, unknown][] = [],
-  Mcs extends [StoreMutatorIdentifier, unknown][] = []
+  Mcs extends [StoreMutatorIdentifier, unknown][] = [],
 >(
-  initializer: StateCreator<T, [...Mps, ['zustand/immer', never]], Mcs>
+  initializer: StateCreator<T, [...Mps, ['zustand/immer', never]], Mcs>,
 ) => StateCreator<T, Mps, [['zustand/immer', never], ...Mcs]>
 
 declare module '../vanilla' {
@@ -21,36 +21,53 @@ type Write<T, U> = Omit<T, keyof U> & U
 type SkipTwo<T> = T extends { length: 0 }
   ? []
   : T extends { length: 1 }
-  ? []
-  : T extends { length: 0 | 1 }
-  ? []
-  : T extends [unknown, unknown, ...infer A]
-  ? A
-  : T extends [unknown, unknown?, ...infer A]
-  ? A
-  : T extends [unknown?, unknown?, ...infer A]
-  ? A
-  : never
+    ? []
+    : T extends { length: 0 | 1 }
+      ? []
+      : T extends [unknown, unknown, ...infer A]
+        ? A
+        : T extends [unknown, unknown?, ...infer A]
+          ? A
+          : T extends [unknown?, unknown?, ...infer A]
+            ? A
+            : never
+
+type SetStateType<T extends unknown[]> = Exclude<T[0], (...args: any[]) => any>
 
 type WithImmer<S> = Write<S, StoreImmer<S>>
 
 type StoreImmer<S> = S extends {
-  getState: () => infer T
   setState: infer SetState
 }
-  ? SetState extends (...a: infer A) => infer Sr
+  ? SetState extends {
+      (...a: infer A1): infer Sr1
+      (...a: infer A2): infer Sr2
+    }
     ? {
+        // Ideally, we would want to infer the `nextStateOrUpdater` `T` type from the
+        // `A1` type, but this is infeasible since it is an intersection with
+        // a partial type.
         setState(
-          nextStateOrUpdater: T | Partial<T> | ((state: Draft<T>) => void),
-          shouldReplace?: boolean | undefined,
-          ...a: SkipTwo<A>
-        ): Sr
+          nextStateOrUpdater:
+            | SetStateType<A2>
+            | Partial<SetStateType<A2>>
+            | ((state: Draft<SetStateType<A2>>) => void),
+          shouldReplace?: false,
+          ...a: SkipTwo<A1>
+        ): Sr1
+        setState(
+          nextStateOrUpdater:
+            | SetStateType<A2>
+            | ((state: Draft<SetStateType<A2>>) => void),
+          shouldReplace: true,
+          ...a: SkipTwo<A2>
+        ): Sr2
       }
     : never
   : never
 
 type ImmerImpl = <T>(
-  storeInitializer: StateCreator<T, [], []>
+  storeInitializer: StateCreator<T, [], []>,
 ) => StateCreator<T, [], []>
 
 const immerImpl: ImmerImpl = (initializer) => (set, get, store) => {
@@ -61,7 +78,7 @@ const immerImpl: ImmerImpl = (initializer) => (set, get, store) => {
       typeof updater === 'function' ? produce(updater as any) : updater
     ) as ((s: T) => T) | T | Partial<T>
 
-    return set(nextState as any, replace, ...a)
+    return set(nextState, replace as any, ...a)
   }
 
   return initializer(store.setState, get, store)
